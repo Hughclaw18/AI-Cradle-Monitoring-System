@@ -89,6 +89,9 @@ export class MemStorage implements IStorage {
     this.musicStatus.push({
       id: 1,
       currentTrack: "Brahms Lullaby",
+      currentTrackArtist: null,
+      currentTrackAlbum: null,
+      currentTrackImageUrl: null,
       isPlaying: false,
       volume: 65,
       progress: 0,
@@ -102,9 +105,11 @@ export class MemStorage implements IStorage {
 
   async insertSensorData(data: InsertSensorData): Promise<SensorData> {
     const newData: SensorData = {
-      ...data,
       id: this.currentId++,
       timestamp: new Date(),
+      temperature: data.temperature,
+      motionDetected: data.motionDetected === undefined ? false : data.motionDetected,
+      cryingDetected: data.cryingDetected === undefined ? false : data.cryingDetected,
     };
     this.sensorData.push(newData);
     return newData;
@@ -116,9 +121,11 @@ export class MemStorage implements IStorage {
 
   async insertServoStatus(status: InsertServoStatus): Promise<ServoStatus> {
     const newStatus: ServoStatus = {
-      ...status,
       id: this.currentId++,
       timestamp: new Date(),
+      position: status.position === undefined ? 0 : status.position,
+      isMoving: status.isMoving === undefined ? false : status.isMoving,
+      autoRock: status.autoRock === undefined ? false : status.autoRock,
     };
     this.servoStatus.push(newStatus);
     return newStatus;
@@ -132,14 +139,25 @@ export class MemStorage implements IStorage {
     const latest = await this.getLatestServoStatus();
     return this.insertServoStatus({
       position,
-      isMoving: latest?.isMoving || false,
-      autoRock: latest?.autoRock || false,
+      isMoving: latest?.isMoving === undefined ? false : latest.isMoving,
+      autoRock: latest?.autoRock === undefined ? false : latest.autoRock,
     });
   }
 
   async insertMusicStatus(status: InsertMusicStatus): Promise<MusicStatus> {
     const newStatus: MusicStatus = {
       ...status,
+      currentTrack: status.currentTrack === undefined ? null : status.currentTrack,
+      currentTrackArtist: status.currentTrackArtist === undefined ? null : status.currentTrackArtist,
+      currentTrackAlbum: status.currentTrackAlbum === undefined ? null : status.currentTrackAlbum,
+      currentTrackImageUrl: status.currentTrackImageUrl === undefined ? null : status.currentTrackImageUrl,
+      isPlaying: status.isPlaying === undefined ? false : status.isPlaying,
+      volume: status.volume === undefined ? 50 : status.volume,
+      progress: status.progress === undefined ? 0 : status.progress,
+      spotifyConnected: status.spotifyConnected === undefined ? false : status.spotifyConnected,
+      spotifyPlaylistId: status.spotifyPlaylistId === undefined ? null : status.spotifyPlaylistId,
+      spotifyPlaylistName: status.spotifyPlaylistName === undefined ? null : status.spotifyPlaylistName,
+      useSpotify: status.useSpotify === undefined ? false : status.useSpotify,
       id: this.currentId++,
       timestamp: new Date(),
     };
@@ -153,17 +171,58 @@ export class MemStorage implements IStorage {
 
   async updateMusicStatus(status: Partial<InsertMusicStatus>): Promise<MusicStatus> {
     const latest = await this.getLatestMusicStatus();
-    return this.insertMusicStatus({
-      currentTrack: latest?.currentTrack || null,
-      isPlaying: latest?.isPlaying || false,
-      volume: latest?.volume || 50,
-      progress: latest?.progress || 0,
-      spotifyConnected: latest?.spotifyConnected || false,
-      spotifyPlaylistId: latest?.spotifyPlaylistId || null,
-      spotifyPlaylistName: latest?.spotifyPlaylistName || null,
-      useSpotify: latest?.useSpotify || false,
-      ...status,
-    });
+    if (latest) {
+      if (status.currentTrack !== undefined) {
+        latest.currentTrack = status.currentTrack;
+      }
+      if (status.currentTrackArtist !== undefined) {
+        latest.currentTrackArtist = status.currentTrackArtist;
+      }
+      if (status.currentTrackAlbum !== undefined) {
+        latest.currentTrackAlbum = status.currentTrackAlbum;
+      }
+      if (status.currentTrackImageUrl !== undefined) {
+        latest.currentTrackImageUrl = status.currentTrackImageUrl;
+      }
+      if (status.isPlaying !== undefined) {
+        latest.isPlaying = status.isPlaying;
+      }
+      if (status.volume !== undefined) {
+        latest.volume = status.volume;
+      }
+      if (status.progress !== undefined) {
+        latest.progress = status.progress;
+      }
+      if (status.spotifyConnected !== undefined) {
+        latest.spotifyConnected = status.spotifyConnected;
+      }
+      if (status.spotifyPlaylistId !== undefined) {
+        latest.spotifyPlaylistId = status.spotifyPlaylistId;
+      }
+      if (status.spotifyPlaylistName !== undefined) {
+        latest.spotifyPlaylistName = status.spotifyPlaylistName;
+      }
+      if (status.useSpotify !== undefined) {
+        latest.useSpotify = status.useSpotify;
+      }
+      latest.timestamp = new Date();
+      return latest;
+    } else {
+      // If no music status exists, insert a new one with default values for missing properties
+      return this.insertMusicStatus({
+        currentTrack: status.currentTrack === undefined ? null : status.currentTrack,
+        currentTrackArtist: status.currentTrackArtist === undefined ? null : status.currentTrackArtist,
+        currentTrackAlbum: status.currentTrackAlbum === undefined ? null : status.currentTrackAlbum,
+        currentTrackImageUrl: status.currentTrackImageUrl === undefined ? null : status.currentTrackImageUrl,
+        isPlaying: status.isPlaying === undefined ? false : status.isPlaying,
+        volume: status.volume === undefined ? 50 : status.volume,
+        progress: status.progress === undefined ? 0 : status.progress,
+        spotifyConnected: status.spotifyConnected === undefined ? false : status.spotifyConnected,
+        spotifyPlaylistId: status.spotifyPlaylistId === undefined ? null : status.spotifyPlaylistId,
+        spotifyPlaylistName: status.spotifyPlaylistName === undefined ? null : status.spotifyPlaylistName,
+        useSpotify: status.useSpotify === undefined ? false : status.useSpotify,
+      });
+    }
   }
 
   async getSystemSettings(): Promise<SystemSettings | undefined> {
@@ -187,8 +246,11 @@ export class MemStorage implements IStorage {
 
   async insertTrack(track: InsertTrack): Promise<Track> {
     const newTrack: Track = {
-      ...track,
       id: this.currentId++,
+      name: track.name,
+      filename: track.filename,
+      duration: track.duration,
+      artist: track.artist === undefined ? null : track.artist,
     };
     this.tracks.push(newTrack);
     return newTrack;

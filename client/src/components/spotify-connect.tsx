@@ -36,12 +36,14 @@ export function SpotifyConnect() {
 
   const setPlaylistMutation = useMutation({
     mutationFn: async (playlist: Playlist) => {
-      return apiRequest("/api/spotify/playlist", "POST", {
+      console.log("Attempting to set playlist:", playlist);
+      return apiRequest("POST", "/api/spotify/playlist", {
         playlistId: playlist.id,
         playlistName: playlist.name,
       });
     },
     onSuccess: () => {
+      console.log("Playlist set successfully!");
       queryClient.invalidateQueries({ queryKey: ["/api/spotify/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/music/status"] });
       toast({
@@ -49,7 +51,8 @@ export function SpotifyConnect() {
         description: "Your Spotify playlist has been connected successfully",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Failed to set playlist:", error);
       toast({
         title: "Error",
         description: "Failed to set playlist",
@@ -61,6 +64,14 @@ export function SpotifyConnect() {
   useEffect(() => {
     if (status?.playlistId) {
       setSelectedPlaylist(status.playlistId);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("spotify_connected") === "true") {
+      queryClient.invalidateQueries({ queryKey: ["/api/spotify/status"] });
+      // Clean up the URL
+      urlParams.delete("spotify_connected");
+      window.history.replaceState({}, document.title, `${window.location.pathname}${urlParams.toString() ? `?${urlParams.toString()}` : ""}`);
     }
   }, [status]);
 
@@ -83,13 +94,13 @@ export function SpotifyConnect() {
             Connect to Spotify
           </CardTitle>
           <CardDescription>
-            Spotify is not connected. The connection should be set up automatically through Replit.
+            Connect your Spotify account to enable music playback.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            If Spotify connection is not working, please ensure the Spotify integration is properly configured in your Replit settings.
-          </p>
+          <Button onClick={() => window.location.href = "/api/spotify/login"}>
+            Connect to Spotify
+          </Button>
         </CardContent>
       </Card>
     );
@@ -127,6 +138,7 @@ export function SpotifyConnect() {
                   key={playlist.id}
                   data-testid={`playlist-${playlist.id}`}
                   onClick={() => {
+                    console.log("Selected playlist:", playlist);
                     setSelectedPlaylist(playlist.id);
                     setPlaylistMutation.mutate(playlist);
                   }}

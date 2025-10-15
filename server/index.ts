@@ -62,8 +62,11 @@ app.use((req, res, next) => {
   const port = 3000;
   server.listen({
     port,
-    host: "localhost",
+    host: "127.0.0.1",
   }, () => {
     log(`serving on port ${port}`);
+  }).on('error', (err: Error) => {
+    console.error('Server failed to start:', err.message);
+    process.exit(1);
   });
 })();

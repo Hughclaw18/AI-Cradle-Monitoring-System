@@ -21,6 +21,9 @@ export const servoStatus = pgTable("servo_status", {
 export const musicStatus = pgTable("music_status", {
   id: serial("id").primaryKey(),
   currentTrack: text("current_track"),
+  currentTrackArtist: text("current_track_artist"),
+  currentTrackAlbum: text("current_track_album"),
+  currentTrackImageUrl: text("current_track_image_url"),
   isPlaying: boolean("is_playing").notNull().default(false),
   volume: integer("volume").notNull().default(50), // 0-100
   progress: real("progress").notNull().default(0), // 0-1

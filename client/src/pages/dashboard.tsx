@@ -11,10 +11,10 @@ import { SettingsPanel } from "@/components/settings-panel";
 import { NotificationToast } from "@/components/notification-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useNotifications } from "@/hooks/use-notifications";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
-import { Track, SystemSettings } from "@shared/schema";
+import { SystemSettings } from "@shared/schema";
 
 export default function Dashboard() {
   const {
@@ -29,11 +29,6 @@ export default function Dashboard() {
 
   const { permission, requestPermission, showAlert } = useNotifications();
   const [activeTab, setActiveTab] = useState("dashboard");
-
-  // Fetch tracks
-  const { data: tracks = [] } = useQuery<Track[]>({
-    queryKey: ['/api/tracks'],
-  });
 
   // Mutations
   const updateMusicMutation = useMutation({
@@ -91,13 +86,6 @@ export default function Dashboard() {
     updateMusicMutation.mutate({ volume });
   };
 
-  const handleTrackSelect = (track: Track) => {
-    updateMusicMutation.mutate({
-      currentTrack: track.name,
-      progress: 0,
-    });
-  };
-
   const handleMoveLeft = () => {
     const newPosition = Math.max(0, (servoStatus?.position || 45) - 15);
     updatePositionMutation.mutate(newPosition);
@@ -133,7 +121,7 @@ export default function Dashboard() {
   const handleStartLullaby = () => {
     updateMusicMutation.mutate({
       isPlaying: true,
-      currentTrack: tracks[0]?.name || "Brahms Lullaby",
+      currentTrack: "Brahms Lullaby", // Updated to a hardcoded value
     });
   };
 
