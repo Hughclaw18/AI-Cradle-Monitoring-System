@@ -92,6 +92,10 @@ export class MemStorage implements IStorage {
       isPlaying: false,
       volume: 65,
       progress: 0,
+      spotifyConnected: false,
+      spotifyPlaylistId: null,
+      spotifyPlaylistName: null,
+      useSpotify: false,
       timestamp: new Date(),
     });
   }
@@ -154,6 +158,10 @@ export class MemStorage implements IStorage {
       isPlaying: latest?.isPlaying || false,
       volume: latest?.volume || 50,
       progress: latest?.progress || 0,
+      spotifyConnected: latest?.spotifyConnected || false,
+      spotifyPlaylistId: latest?.spotifyPlaylistId || null,
+      spotifyPlaylistName: latest?.spotifyPlaylistName || null,
+      useSpotify: latest?.useSpotify || false,
       ...status,
     });
   }
