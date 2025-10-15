@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertSystemSettingsSchema, insertMusicStatusSchema, insertServoStatusSchema } from "@shared/schema";
 import { z } from "zod";
+import { getUncachableSpotifyClient, isSpotifyConnected } from "./spotify";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -91,6 +92,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(tracks);
     } catch (error) {
       res.status(500).json({ error: "Failed to get tracks" });
+    }
+  });
+
+  // Spotify Routes
+  
+  // Check Spotify connection status
+  app.get("/api/spotify/status", async (req, res) => {
+    try {
+      const connected = await isSpotifyConnected();
+      const musicStatus = await storage.getLatestMusicStatus();
+      res.json({ 
+        connected,
+        playlistId: musicStatus?.spotifyPlaylistId,
+        playlistName: musicStatus?.spotifyPlaylistName,
+        useSpotify: musicStatus?.useSpotify
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check Spotify status" });
+    }
+  });
+
+  // Get user's Spotify playlists
+  app.get("/api/spotify/playlists", async (req, res) => {
+    try {
+      const spotify = await getUncachableSpotifyClient();
+      const playlists = await spotify.currentUser.playlists.playlists(50);
+      res.json(playlists.items);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch playlists", message: error.message });
+    }
+  });
+
+  // Set active Spotify playlist
+  app.post("/api/spotify/playlist", async (req, res) => {
+    try {
+      const { playlistId, playlistName } = req.body;
+      if (!playlistId || !playlistName) {
+        return res.status(400).json({ error: "Playlist ID and name are required" });
+      }
+      
+      const musicStatus = await storage.updateMusicStatus({
+        spotifyConnected: true,
+        spotifyPlaylistId: playlistId,
+        spotifyPlaylistName: playlistName,
+        useSpotify: true,
+      });
+      
+      res.json(musicStatus);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set playlist" });
+    }
+  });
+
+  // Play from Spotify playlist
+  app.post("/api/spotify/play", async (req, res) => {
+    try {
+      const musicStatus = await storage.getLatestMusicStatus();
+      if (!musicStatus?.spotifyPlaylistId) {
+        return res.status(400).json({ error: "No playlist selected" });
+      }
+
+      const spotify = await getUncachableSpotifyClient();
+      
+      // Get user's available devices
+      const devices = await spotify.player.getAvailableDevices();
+      
+      if (devices.devices.length === 0) {
+        return res.status(400).json({ error: "No active Spotify devices found. Please open Spotify on a device first." });
+      }
+
+      // Play the playlist on the first available device
+      await spotify.player.startResumePlayback(
+        devices.devices[0].id!,
+        `spotify:playlist:${musicStatus.spotifyPlaylistId}`
+      );
+
+      await storage.updateMusicStatus({
+        isPlaying: true,
+        currentTrack: musicStatus.spotifyPlaylistName || "Spotify Playlist",
+      });
+
+      res.json({ success: true, message: "Playing from Spotify" });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to play from Spotify", message: error.message });
+    }
+  });
+
+  // Pause Spotify playback
+  app.post("/api/spotify/pause", async (req, res) => {
+    try {
+      const spotify = await getUncachableSpotifyClient();
+      const devices = await spotify.player.getAvailableDevices();
+      
+      if (devices.devices.length > 0) {
+        await spotify.player.pausePlayback(devices.devices[0].id!);
+      }
+      
+      await storage.updateMusicStatus({
+        isPlaying: false,
+      });
+
+      res.json({ success: true, message: "Spotify playback paused" });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to pause Spotify", message: error.message });
     }
   });
 
@@ -201,11 +306,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (cryingDetected && settings?.autoResponse) {
         const musicStatus = await storage.getLatestMusicStatus();
         if (!musicStatus?.isPlaying) {
-          await storage.updateMusicStatus({
-            isPlaying: true,
-            currentTrack: "Brahms Lullaby",
-            progress: 0,
-          });
+          // Use Spotify if enabled and connected
+          if (musicStatus?.useSpotify && musicStatus?.spotifyPlaylistId) {
+            try {
+              const spotify = await getUncachableSpotifyClient();
+              const devices = await spotify.player.getAvailableDevices();
+              
+              if (devices.devices.length > 0) {
+                await spotify.player.startResumePlayback(
+                  devices.devices[0].id!,
+                  `spotify:playlist:${musicStatus.spotifyPlaylistId}`
+                );
+                
+                await storage.updateMusicStatus({
+                  isPlaying: true,
+                  currentTrack: musicStatus.spotifyPlaylistName || "Spotify Playlist",
+                });
+              }
+            } catch (error) {
+              console.error('Failed to play Spotify:', error);
+              // Fallback to default track
+              await storage.updateMusicStatus({
+                isPlaying: true,
+                currentTrack: "Brahms Lullaby",
+                progress: 0,
+              });
+            }
+          } else {
+            // Use built-in music player
+            await storage.updateMusicStatus({
+              isPlaying: true,
+              currentTrack: "Brahms Lullaby",
+              progress: 0,
+            });
+          }
         }
       }
 

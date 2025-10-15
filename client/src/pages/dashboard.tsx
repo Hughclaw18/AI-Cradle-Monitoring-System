@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorCard } from "@/components/sensor-card";
-import { MusicPlayer } from "@/components/music-player";
+import { SpotifyPlayer } from "@/components/spotify-player";
+import { SpotifyConnect } from "@/components/spotify-connect";
 import { ServoControl } from "@/components/servo-control";
 import { SettingsPanel } from "@/components/settings-panel";
 import { NotificationToast } from "@/components/notification-toast";
@@ -294,17 +295,9 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="music" className="mt-4">
-            <MusicPlayer
-              tracks={tracks}
-              currentTrack={musicStatus?.currentTrack || undefined}
-              isPlaying={musicStatus?.isPlaying || false}
-              volume={musicStatus?.volume || 65}
-              progress={musicStatus?.progress || 0}
-              onPlayPause={handlePlayPause}
-              onVolumeChange={handleVolumeChange}
-              onTrackSelect={handleTrackSelect}
-            />
+          <TabsContent value="music" className="mt-4 space-y-4">
+            <SpotifyPlayer musicStatus={musicStatus || undefined} />
+            <SpotifyConnect />
           </TabsContent>
 
           <TabsContent value="control" className="mt-4">

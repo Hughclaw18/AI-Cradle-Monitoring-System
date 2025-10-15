@@ -24,6 +24,10 @@ export const musicStatus = pgTable("music_status", {
   isPlaying: boolean("is_playing").notNull().default(false),
   volume: integer("volume").notNull().default(50), // 0-100
   progress: real("progress").notNull().default(0), // 0-1
+  spotifyConnected: boolean("spotify_connected").notNull().default(false),
+  spotifyPlaylistId: text("spotify_playlist_id"),
+  spotifyPlaylistName: text("spotify_playlist_name"),
+  useSpotify: boolean("use_spotify").notNull().default(false),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
