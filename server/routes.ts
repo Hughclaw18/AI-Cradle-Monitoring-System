@@ -183,7 +183,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/spotify/pause", async (req, res) => {
     try {
       const spotify = await getUncachableSpotifyClient();
-      await spotify.player.pausePlayback();
+      const devices = await spotify.player.getAvailableDevices();
+      
+      if (devices.devices.length > 0) {
+        await spotify.player.pausePlayback(devices.devices[0].id!);
+      }
       
       await storage.updateMusicStatus({
         isPlaying: false,
