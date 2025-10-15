@@ -165,7 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Play the playlist on the first available device
       await spotify.player.startResumePlayback(
         devices.devices[0].id!,
-        musicStatus.spotifyPlaylistId
+        `spotify:playlist:${musicStatus.spotifyPlaylistId}`
       );
 
       await storage.updateMusicStatus({
@@ -315,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (devices.devices.length > 0) {
                 await spotify.player.startResumePlayback(
                   devices.devices[0].id!,
-                  musicStatus.spotifyPlaylistId
+                  `spotify:playlist:${musicStatus.spotifyPlaylistId}`
                 );
                 
                 await storage.updateMusicStatus({
