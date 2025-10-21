@@ -86,6 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               spotifyConnected: true, // Still connected, just nothing playing
             };
         status = await storage.updateMusicStatus(updateData);
+        console.log("Broadcasting music status update:", status);
         broadcast({ type: 'music_status_update', data: status });
       }
 
@@ -193,6 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   app.post("/api/spotify/player", async (req, res) => {
+    console.log("Received /api/spotify/player request. Body:", req.body);
     const { action, deviceId, playlistId } = req.body as {
       action: 'play' | 'pause' | 'next' | 'previous';
       deviceId?: string;
@@ -224,8 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         case 'play':
           try {
             console.log("Starting playback on device:", targetDevice.id, "with playlistId:", playlistId);
-            await startPlaylistPlayback(targetDevice.id, playlistId);
-            const currentTrackAfterPlay = await getCurrentlyPlayingTrack();
+            const currentTrackAfterPlay = await startPlaylistPlayback(targetDevice.id, playlistId);
             await storage.updateMusicStatus({
               isPlaying: true,
               currentTrack: currentTrackAfterPlay?.name || null,
@@ -391,9 +392,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   let lastCryingAlertTime = 0;
   let lastObjectAlertTime = 0;
   let lastTempAlertTime = 0;
-  let lastCryingState: boolean = false;
+  let lastCryingState = false;
+  let cryingPlaybackActive = false; // New flag
+  let cryingPlaybackTimeout: NodeJS.Timeout | null = null; // New timeout variable
 
-  // Simulate real-time sensor data updates
   setInterval(async () => {
     try {
       const settings = await storage.getSystemSettings();
@@ -443,7 +445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastObjectAlertTime = currentTime;
       }
       
-      if (settings && sensorData.cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) { // 30 seconds delay
+      if (settings && sensorData.cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) {
         broadcast({
           type: 'notification',
           data: {
@@ -457,49 +459,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Auto-rocking based on crying
       if (cryingDetected && settings?.autoResponse) {
-        const musicStatus = await storage.getLatestMusicStatus();
-        if (!musicStatus?.isPlaying) {
-          if (musicStatus?.useSpotify && musicStatus?.spotifyPlaylistId) {
-            try {
-              const spotify = await getUncachableSpotifyClient();
-              const device = await getSpotifyDevice(spotify);
-              if (device?.id) {
-                await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
-                const currentTrackAfterCryingPlay = await getCurrentlyPlayingTrack();
-                await storage.updateMusicStatus({
-                  isPlaying: true,
-                  currentTrack: currentTrackAfterCryingPlay?.name || null,
-                  currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
-                  currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
-                  currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
-                });
+        if (cryingPlaybackTimeout) {
+          clearTimeout(cryingPlaybackTimeout);
+          cryingPlaybackTimeout = null;
+        }
+
+        if (!cryingPlaybackActive) {
+          const musicStatus = await storage.getLatestMusicStatus();
+          if (!musicStatus?.isPlaying) {
+            if (musicStatus?.useSpotify && musicStatus?.spotifyPlaylistId) {
+              try {
+                const spotify = await getUncachableSpotifyClient();
+                const device = await getSpotifyDevice(spotify);
+                  if (device?.id) {
+                    const currentTrackAfterCryingPlay = await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
+                    // Add a small delay to allow Spotify API to update playback state
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+                    await storage.updateMusicStatus({
+                      isPlaying: true,
+                      currentTrack: currentTrackAfterCryingPlay?.name || null,
+                      currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
+                      currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
+                      currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
+                  });
+                  cryingPlaybackActive = true;
+                }
+              } catch (error) {
+                console.error('Failed to auto-play Spotify:', error);
               }
-            } catch (error) {
-              console.error('Failed to auto-play Spotify:', error);
             }
           }
         }
-      } else if (lastCryingState && !cryingDetected) {
-        // If crying stopped, stop Spotify playback
-        const musicStatus = await storage.getLatestMusicStatus();
-        if (musicStatus?.isPlaying) {
-          try {
-            const spotify = await getUncachableSpotifyClient();
-            const device = await getSpotifyDevice(spotify);
-            if (device?.id) {
-              await stopPlayback(device.id);
-              await storage.updateMusicStatus({
-                isPlaying: false,
-                currentTrack: null,
-                currentTrackArtist: null,
-                currentTrackAlbum: null,
-                currentTrackImageUrl: null,
-              });
+      } else if (cryingPlaybackActive && !cryingDetected) {
+        if (!cryingPlaybackTimeout) {
+          cryingPlaybackTimeout = setTimeout(async () => {
+            console.log('Crying playback timeout reached, pausing music.');
+            const musicStatus = await storage.getLatestMusicStatus();
+            if (musicStatus?.isPlaying) {
+              try {
+                const spotify = await getUncachableSpotifyClient();
+                const device = await getSpotifyDevice(spotify);
+                if (device?.id) {
+                  await stopPlayback(device.id);
+                  await storage.updateMusicStatus({
+                    isPlaying: false,
+                    currentTrack: null,
+                    currentTrackArtist: null,
+                    currentTrackAlbum: null,
+                    currentTrackImageUrl: null,
+                  });
+                }
+              } catch (error) {
+                console.error('Failed to stop Spotify playback:', error);
+              }
             }
-          } catch (error) {
-            console.error('Failed to stop Spotify playback:', error);
-          }
+            cryingPlaybackActive = false;
+            cryingPlaybackTimeout = null;
+          }, 100000);
         }
+      } else if (!cryingDetected && cryingPlaybackTimeout) {
+        clearTimeout(cryingPlaybackTimeout);
+        cryingPlaybackTimeout = null;
       }
 
       lastCryingState = cryingDetected;

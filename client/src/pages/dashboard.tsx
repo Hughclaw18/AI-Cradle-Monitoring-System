@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorCard } from "@/components/sensor-card";
 import { SpotifyPlayer } from "@/components/spotify-player";
 import { SpotifyConnect } from "@/components/spotify-connect";
-import { ServoControl } from "@/components/servo-control";
+// import Detections from "@/components/detection-history";
+import DetectionGraph from "@/components/DetectionGraph";
 import { SettingsPanel } from "@/components/settings-panel";
 import { NotificationToast } from "@/components/notification-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -14,7 +15,14 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
-import { SystemSettings } from "@shared/schema";
+import { SystemSettings, SensorData } from "@shared/schema";
+import { format } from 'date-fns';
+
+interface DetectionEvent {
+  type: 'crying' | 'object' | 'temperature';
+  timestamp: Date;
+  details?: string;
+}
 
 export default function Dashboard() {
   const {
@@ -29,6 +37,53 @@ export default function Dashboard() {
 
   const { permission, requestPermission, showAlert } = useNotifications();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [detections, setDetections] = useState<DetectionEvent[]>([]);
+  const [isObjectExpanded, setIsObjectExpanded] = useState(false);
+  const [isCryingExpanded, setIsCryingExpanded] = useState(false);
+  const [isTemperatureExpanded, setIsTemperatureExpanded] = useState(false);
+
+  useEffect(() => {
+    if (sensorData) {
+      const newDetections: DetectionEvent[] = [];
+
+      if (sensorData.cryingDetected) {
+        newDetections.push({
+          type: 'crying',
+          timestamp: new Date(sensorData.timestamp),
+          details: 'Crying detected',
+        });
+      }
+
+      if (sensorData.objectDetected && sensorData.objectDetected.length > 0) {
+        sensorData.objectDetected.forEach(obj => {
+          newDetections.push({
+            type: 'object',
+            timestamp: new Date(obj.timestamp),
+            details: `Object detected: ${obj.object_name}`,
+          });
+        });
+      }
+
+      if (sensorData.temperature > (settings?.tempThreshold || 78)) {
+        newDetections.push({
+          type: 'temperature',
+          timestamp: new Date(sensorData.timestamp),
+          details: `High temperature detected: ${sensorData.temperature}°F`,
+        });
+      }
+
+      if (newDetections.length > 0) {
+        setDetections(prevDetections => {
+          const uniqueNewDetections = newDetections.filter(
+            newDet => !prevDetections.some(
+              prevDet => prevDet.type === newDet.type && prevDet.timestamp.getTime() === newDet.timestamp.getTime()
+            )
+          );
+          return [...prevDetections, ...uniqueNewDetections].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        });
+      }
+    }
+  }, [sensorData]);
 
   // Mutations
   const updateMusicMutation = useMutation({
@@ -195,9 +250,9 @@ export default function Dashboard() {
               <Play className="h-4 w-4 mb-1" />
               <span className="text-xs">Music</span>
             </TabsTrigger>
-            <TabsTrigger value="control" className="flex flex-col items-center p-2">
+            <TabsTrigger value="history" className="flex flex-col items-center p-2">
               <Settings className="h-4 w-4 mb-1" />
-              <span className="text-xs">Control</span>
+              <span className="text-xs">History</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex flex-col items-center p-2">
               <Settings className="h-4 w-4 mb-1" />
@@ -291,17 +346,87 @@ export default function Dashboard() {
             <SpotifyConnect />
           </TabsContent>
 
-          <TabsContent value="control" className="mt-4">
-            <ServoControl
-              position={servoStatus?.position || 45}
-              isMoving={servoStatus?.isMoving || false}
-              autoRock={servoStatus?.autoRock || false}
-              onMoveLeft={handleMoveLeft}
-              onMoveRight={handleMoveRight}
-              onStop={handleStop}
-              onToggleAutoRock={handleToggleAutoRock}
-              onEmergencyStop={handleEmergencyStop}
-            />
+          <TabsContent value="history" className="space-y-4 mt-4">
+            <Card>
+              <CardContent className="p-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-3">Detection History</h2>
+
+                {/* Object Detections */}
+                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsObjectExpanded(!isObjectExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Object Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isObjectExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'object').length === 0 ? (
+                        <p className="text-gray-500">No object detections.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'object').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Crying Detections */}
+                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsCryingExpanded(!isCryingExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Crying Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isCryingExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'crying').length === 0 ? (
+                        <p className="text-gray-500">No crying detections.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'crying').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Temperature Detections */}
+                <div className="border rounded-lg shadow-sm bg-white">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsTemperatureExpanded(!isTemperatureExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Temperature Alerts</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isTemperatureExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'temperature').length === 0 ? (
+                        <p className="text-gray-500">No temperature alerts.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'temperature').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="settings" className="mt-4">
@@ -339,3 +464,32 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// Add this new component outside the Dashboard function, but within the same file
+interface DetectionLogItemProps {
+  entry: DetectionEvent;
+}
+
+const DetectionLogItem: React.FC<DetectionLogItemProps> = ({ entry }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="border rounded-lg shadow-sm bg-white">
+      <div
+        className="flex justify-between items-center p-3 cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <p className="text-sm font-medium">
+          {entry.type === 'temperature' ? 'Temperature Alert' : `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} Detection`}
+          <span className="ml-2 text-gray-500">{format(new Date(entry.timestamp), 'PPP p')}</span>
+        </p>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+      </div>
+      {isExpanded && (
+        <div className="p-3 pt-0 border-t">
+          <p className="text-sm text-gray-600">Details: {entry.details}</p>
+        </div>
+      )}
+    </div>
+  );
+};

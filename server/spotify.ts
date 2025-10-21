@@ -221,7 +221,7 @@ export async function startPlaylistPlayback(deviceId?: string, playlistId?: stri
 
     if (!targetDeviceId) {
       console.warn("No device ID provided or active device found to start playback.");
-      return false;
+      return null;
     }
 
     if (playlistId) {
