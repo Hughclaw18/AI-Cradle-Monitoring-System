@@ -4,11 +4,18 @@ import { z } from "zod";
 
 export const sensorData = pgTable("sensor_data", {
   id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
   temperature: real("temperature").notNull(),
-  motionDetected: boolean("motion_detected").notNull().default(false),
+  objectDetected: text("object_detected").$type<{
+    object_name: string;
+    timestamp: string;
+    detection_id: string;
+  }[] | null>(),
   cryingDetected: boolean("crying_detected").notNull().default(false),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
+
+export type SensorData = typeof sensorData.$inferSelect;
+export type InsertSensorData = typeof sensorData.$inferInsert;
 
 export const servoStatus = pgTable("servo_status", {
   id: serial("id").primaryKey(),
@@ -21,9 +28,16 @@ export const servoStatus = pgTable("servo_status", {
 export const musicStatus = pgTable("music_status", {
   id: serial("id").primaryKey(),
   currentTrack: text("current_track"),
+  currentTrackArtist: text("current_track_artist"),
+  currentTrackAlbum: text("current_track_album"),
+  currentTrackImageUrl: text("current_track_image_url"),
   isPlaying: boolean("is_playing").notNull().default(false),
   volume: integer("volume").notNull().default(50), // 0-100
   progress: real("progress").notNull().default(0), // 0-1
+  spotifyConnected: boolean("spotify_connected").notNull().default(false),
+  spotifyPlaylistId: text("spotify_playlist_id"),
+  spotifyPlaylistName: text("spotify_playlist_name"),
+  useSpotify: boolean("use_spotify").notNull().default(false),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
@@ -72,8 +86,7 @@ export const insertTrackSchema = createInsertSchema(tracks).omit({
 });
 
 // Types
-export type SensorData = typeof sensorData.$inferSelect;
-export type InsertSensorData = z.infer<typeof insertSensorDataSchema>;
+
 
 export type ServoStatus = typeof servoStatus.$inferSelect;
 export type InsertServoStatus = z.infer<typeof insertServoStatusSchema>;
@@ -86,3 +99,9 @@ export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
 
 export type Track = typeof tracks.$inferSelect;
 export type InsertTrack = z.infer<typeof insertTrackSchema>;
+
+export interface NotificationData {
+  title: string;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+}

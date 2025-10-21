@@ -1,19 +1,29 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard } from "lucide-react";
+import { getTimeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorCard } from "@/components/sensor-card";
-import { MusicPlayer } from "@/components/music-player";
-import { ServoControl } from "@/components/servo-control";
+import { SpotifyPlayer } from "@/components/spotify-player";
+import { SpotifyConnect } from "@/components/spotify-connect";
+// import Detections from "@/components/detection-history";
+import DetectionGraph from "@/components/DetectionGraph";
 import { SettingsPanel } from "@/components/settings-panel";
 import { NotificationToast } from "@/components/notification-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useNotifications } from "@/hooks/use-notifications";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
-import { Track, SystemSettings } from "@shared/schema";
+import { SystemSettings, SensorData } from "@shared/schema";
+import { format } from 'date-fns';
+
+interface DetectionEvent {
+  type: 'crying' | 'object' | 'temperature';
+  timestamp: Date;
+  details?: string;
+}
 
 export default function Dashboard() {
   const {
@@ -24,15 +34,58 @@ export default function Dashboard() {
     settings,
     notifications,
     dismissNotification,
+    clearAllNotifications,
   } = useWebSocket();
 
   const { permission, requestPermission, showAlert } = useNotifications();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [detections, setDetections] = useState<DetectionEvent[]>([]);
+  const [isObjectExpanded, setIsObjectExpanded] = useState(false);
+  const [isCryingExpanded, setIsCryingExpanded] = useState(false);
+  const [isTemperatureExpanded, setIsTemperatureExpanded] = useState(false);
 
-  // Fetch tracks
-  const { data: tracks = [] } = useQuery<Track[]>({
-    queryKey: ['/api/tracks'],
-  });
+  useEffect(() => {
+    if (sensorData) {
+      const newDetections: DetectionEvent[] = [];
+
+      if (sensorData.cryingDetected) {
+        newDetections.push({
+          type: 'crying',
+          timestamp: new Date(sensorData.timestamp),
+          details: 'Crying detected',
+        });
+      }
+
+      if (sensorData.objectDetected && sensorData.objectDetected.length > 0) {
+        sensorData.objectDetected.forEach(obj => {
+          newDetections.push({
+            type: 'object',
+            timestamp: new Date(obj.timestamp),
+            details: `Object detected: ${obj.object_name}`,
+          });
+        });
+      }
+
+      if (sensorData.temperature > (settings?.tempThreshold || 78)) {
+        newDetections.push({
+          type: 'temperature',
+          timestamp: new Date(sensorData.timestamp),
+          details: `High temperature detected: ${sensorData.temperature}°F`,
+        });
+      }
+
+      if (newDetections.length > 0) {
+        setDetections(prevDetections => {
+          const uniqueNewDetections = newDetections.filter(
+            newDet => !prevDetections.some(
+              prevDet => prevDet.type === newDet.type && prevDet.timestamp.getTime() === newDet.timestamp.getTime()
+            )
+          );
+          return [...prevDetections, ...uniqueNewDetections].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        });
+      }
+    }
+  }, [sensorData]);
 
   // Mutations
   const updateMusicMutation = useMutation({
@@ -90,13 +143,6 @@ export default function Dashboard() {
     updateMusicMutation.mutate({ volume });
   };
 
-  const handleTrackSelect = (track: Track) => {
-    updateMusicMutation.mutate({
-      currentTrack: track.name,
-      progress: 0,
-    });
-  };
-
   const handleMoveLeft = () => {
     const newPosition = Math.max(0, (servoStatus?.position || 45) - 15);
     updatePositionMutation.mutate(newPosition);
@@ -132,7 +178,7 @@ export default function Dashboard() {
   const handleStartLullaby = () => {
     updateMusicMutation.mutate({
       isPlaying: true,
-      currentTrack: tracks[0]?.name || "Brahms Lullaby",
+      currentTrack: "Brahms Lullaby", // Updated to a hardcoded value
     });
   };
 
@@ -148,16 +194,6 @@ export default function Dashboard() {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  const getTimeAgo = (timestamp: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - new Date(timestamp).getTime();
-    const seconds = Math.floor(diff / 1000);
-    
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-    return `${Math.floor(seconds / 3600)} hours ago`;
   };
 
   return (
@@ -190,6 +226,16 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllNotifications}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                Clear All
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -199,16 +245,16 @@ export default function Dashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="dashboard" className="flex flex-col items-center p-2">
-              <Settings className="h-4 w-4 mb-1" />
+              <LayoutDashboard className="h-4 w-4 mb-1" />
               <span className="text-xs">Dashboard</span>
             </TabsTrigger>
             <TabsTrigger value="music" className="flex flex-col items-center p-2">
               <Play className="h-4 w-4 mb-1" />
               <span className="text-xs">Music</span>
             </TabsTrigger>
-            <TabsTrigger value="control" className="flex flex-col items-center p-2">
-              <Settings className="h-4 w-4 mb-1" />
-              <span className="text-xs">Control</span>
+            <TabsTrigger value="history" className="flex flex-col items-center p-2">
+              <History className="h-4 w-4 mb-1" />
+              <span className="text-xs">History</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex flex-col items-center p-2">
               <Settings className="h-4 w-4 mb-1" />
@@ -222,52 +268,45 @@ export default function Dashboard() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-semibold text-gray-800">System Status</h2>
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                    <span className={`text-sm font-medium ${connected ? 'text-green-600' : 'text-red-600'}`}>
-                      {connected ? 'Online' : 'Offline'}
-                    </span>
+                  <Button variant="outline" size="sm" className="text-sm">
+                    View Details
+                  </Button>
+                </div>
+                {sensorData && (
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
+                    <SensorCard
+                      type="temperature"
+                      value={`${Math.round(sensorData.temperature)}°F`}
+                      status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'High' : 'Normal'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isAlert={sensorData.temperature > (settings?.tempThreshold || 78)}
+                      threshold={settings?.tempThreshold}
+                      currentValue={sensorData.temperature}
+                    />
+                    
+                    
+                    <SensorCard
+                      type="object"
+                      value={sensorData.objectDetected && sensorData.objectDetected.length > 0 
+                        ? `${sensorData.objectDetected[0].object_name} at ${new Date(sensorData.objectDetected[0].timestamp).toLocaleTimeString()}` 
+                        : 'No Object'}
+                      status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Active' : 'Inactive'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isActive={!!(sensorData.objectDetected && sensorData.objectDetected.length > 0)}
+                    />
+                    
+                    <SensorCard
+                      type="crying"
+                      value={sensorData.cryingDetected ? 'Detected' : 'Silent'}
+                      status={sensorData.cryingDetected ? 'Crying' : 'Quiet'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isActive={sensorData.cryingDetected}
+                      isAlert={sensorData.cryingDetected}
+                    />
                   </div>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Last update: {sensorData ? getTimeAgo(sensorData.timestamp) : 'Never'}
-                </div>
+                )}
               </CardContent>
             </Card>
-
-            {/* Sensor Cards */}
-            <div className="space-y-4">
-              {sensorData && (
-                <>
-                  <SensorCard
-                    type="temperature"
-                    value={`${Math.round(sensorData.temperature)}°F`}
-                    status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'High' : 'Normal'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isAlert={sensorData.temperature > (settings?.tempThreshold || 78)}
-                    threshold={settings?.tempThreshold}
-                    currentValue={sensorData.temperature}
-                  />
-                  
-                  <SensorCard
-                    type="motion"
-                    value={sensorData.motionDetected ? 'Motion' : 'No Motion'}
-                    status={sensorData.motionDetected ? 'Active' : 'Inactive'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isActive={sensorData.motionDetected}
-                  />
-                  
-                  <SensorCard
-                    type="crying"
-                    value={sensorData.cryingDetected ? 'Detected' : 'Silent'}
-                    status={sensorData.cryingDetected ? 'Crying' : 'Quiet'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isActive={sensorData.cryingDetected}
-                    isAlert={sensorData.cryingDetected}
-                  />
-                </>
-              )}
-            </div>
 
             {/* Quick Actions */}
             <Card>
@@ -294,33 +333,95 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="music" className="mt-4">
-            <MusicPlayer
-              tracks={tracks}
-              currentTrack={musicStatus?.currentTrack || undefined}
-              isPlaying={musicStatus?.isPlaying || false}
-              volume={musicStatus?.volume || 65}
-              progress={musicStatus?.progress || 0}
-              onPlayPause={handlePlayPause}
-              onVolumeChange={handleVolumeChange}
-              onTrackSelect={handleTrackSelect}
-            />
+          <TabsContent value="music" className="mt-4 space-y-4">
+            <SpotifyPlayer musicStatus={musicStatus || undefined} />
+            <SpotifyConnect />
           </TabsContent>
 
-          <TabsContent value="control" className="mt-4">
-            <ServoControl
-              position={servoStatus?.position || 45}
-              isMoving={servoStatus?.isMoving || false}
-              autoRock={servoStatus?.autoRock || false}
-              onMoveLeft={handleMoveLeft}
-              onMoveRight={handleMoveRight}
-              onStop={handleStop}
-              onToggleAutoRock={handleToggleAutoRock}
-              onEmergencyStop={handleEmergencyStop}
-            />
+          <TabsContent value="history" className="space-y-4 mt-4">
+            <Card>
+              <CardContent className="p-4">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Detection History</h2>
+
+                {/* Object Detections */}
+                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsObjectExpanded(!isObjectExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Object Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isObjectExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'object').length === 0 ? (
+                        <p className="text-gray-500">No object detections.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'object').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Crying Detections */}
+                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsCryingExpanded(!isCryingExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Crying Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isCryingExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'crying').length === 0 ? (
+                        <p className="text-gray-500">No crying detections.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'crying').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Temperature Detections */}
+                <div className="border rounded-lg shadow-sm bg-white">
+                  <div
+                    className="flex justify-between items-center p-3 cursor-pointer"
+                    onClick={() => setIsTemperatureExpanded(!isTemperatureExpanded)}
+                  >
+                    <h3 className="font-medium text-gray-700">Temperature Alerts</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                  </div>
+                  {isTemperatureExpanded && (
+                    <div className="p-3 pt-0 border-t space-y-2">
+                      {detections?.filter(d => d.type === 'temperature').length === 0 ? (
+                        <p className="text-gray-500">No temperature alerts.</p>
+                      ) : (
+                        detections?.filter(d => d.type === 'temperature').map((entry, index) => (
+                          <div key={index} className="p-2 border rounded">
+                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
+                            <p className="text-sm">Details: {entry.details}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="settings" className="mt-4">
+          <TabsContent value="settings" className="space-y-4 mt-4">
             {settings && (
               <SettingsPanel
                 settings={settings}
@@ -350,8 +451,38 @@ export default function Dashboard() {
           message={notification.message}
           severity={notification.severity}
           onDismiss={() => dismissNotification(index)}
+          duration={8000} // Set duration to 8 seconds
         />
       ))}
     </div>
   );
 }
+
+// Add this new component outside the Dashboard function, but within the same file
+interface DetectionLogItemProps {
+  entry: DetectionEvent;
+}
+
+const DetectionLogItem: React.FC<DetectionLogItemProps> = ({ entry }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="border rounded-lg shadow-sm bg-white">
+      <div
+        className="flex justify-between items-center p-3 cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <p className="text-sm font-medium">
+          {entry.type === 'temperature' ? 'Temperature Alert' : `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} Detection`}
+          <span className="ml-2 text-gray-500">{format(new Date(entry.timestamp), 'PPP p')}</span>
+        </p>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+      </div>
+      {isExpanded && (
+        <div className="p-3 pt-0 border-t">
+          <p className="text-sm text-gray-600">Details: {entry.details}</p>
+        </div>
+      )}
+    </div>
+  );
+};

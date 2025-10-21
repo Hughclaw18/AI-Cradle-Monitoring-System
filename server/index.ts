@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
 
 const app = express();
 app.use(express.json());
@@ -37,6 +39,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const httpServer = createServer(app);
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -62,8 +67,11 @@ app.use((req, res, next) => {
   const port = 3000;
   server.listen({
     port,
-    host: "localhost",
+    host: "127.0.0.1",
   }, () => {
     log(`serving on port ${port}`);
+  }).on('error', (err: Error) => {
+    console.error('Server failed to start:', err.message);
+    process.exit(1);
   });
 })();

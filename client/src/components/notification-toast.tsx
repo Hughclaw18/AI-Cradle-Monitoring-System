@@ -7,16 +7,17 @@ interface NotificationToastProps {
   message: string;
   severity: 'info' | 'warning' | 'error';
   onDismiss: () => void;
+  duration?: number; // Add duration prop
 }
 
-export function NotificationToast({ title, message, severity, onDismiss }: NotificationToastProps) {
+export function NotificationToast({ title, message, severity, onDismiss, duration = 5000 }: NotificationToastProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       onDismiss();
-    }, 5000);
+    }, duration);
 
     return () => clearTimeout(timer);
-  }, [onDismiss]);
+  }, [onDismiss, duration]);
 
   const getIcon = () => {
     switch (severity) {

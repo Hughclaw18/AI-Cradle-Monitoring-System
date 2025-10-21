@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface SensorCardProps {
-  type: 'temperature' | 'motion' | 'crying';
+  type: 'temperature' | 'object' | 'crying';
   value: string;
   status: string;
   timestamp: string;
@@ -27,7 +27,7 @@ export function SensorCard({
     switch (type) {
       case 'temperature':
         return <Thermometer className="h-6 w-6 text-blue-600" />;
-      case 'motion':
+      case 'object':
         return <Footprints className="h-6 w-6 text-green-600" />;
       case 'crying':
         return <Volume2 className="h-6 w-6 text-amber-600" />;
@@ -38,8 +38,8 @@ export function SensorCard({
     switch (type) {
       case 'temperature':
         return 'Temperature';
-      case 'motion':
-        return 'Motion Detection';
+      case 'object':
+        return 'Object Detection';
       case 'crying':
         return 'Crying Detection';
     }
@@ -49,8 +49,8 @@ export function SensorCard({
     switch (type) {
       case 'temperature':
         return 'Room temperature';
-      case 'motion':
-        return 'Movement sensor';
+      case 'object':
+        return 'Object sensor';
       case 'crying':
         return 'Sound analysis';
     }
@@ -58,7 +58,7 @@ export function SensorCard({
 
   const getStatusColor = () => {
     if (isAlert) return 'text-amber-600';
-    if (type === 'motion' || type === 'crying') {
+    if (type === 'object' || type === 'crying') {
       return isActive ? 'text-green-600' : 'text-gray-500';
     }
     return 'text-green-600';
@@ -73,44 +73,49 @@ export function SensorCard({
   };
 
   return (
-    <Card className="w-full">
+    <Card className={cn(
+      "relative",
+      isAlert && "border-amber-400 bg-amber-50"
+    )}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center",
-              type === 'temperature' ? 'bg-blue-100' : 
-              type === 'motion' ? 'bg-green-100' : 'bg-amber-100'
-            )}>
+            <div className="p-2 bg-gray-100 rounded-full">
               {getIcon()}
             </div>
             <div>
-              <h3 className="font-medium text-gray-800">{getTitle()}</h3>
-              <p className="text-xs text-gray-500">{getSubtitle()}</p>
+              <h3 className="text-lg font-semibold text-gray-800">{getTitle()}</h3>
+              <p className="text-sm text-gray-500">{getSubtitle()}</p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-gray-800">{value}</div>
-            <div className={cn("text-xs", getStatusColor())}>{status}</div>
+          <div className={cn(
+            "px-3 py-1 rounded-full text-xs font-medium",
+            isAlert ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"
+          )}>
+            {status}
           </div>
         </div>
 
+        <div className="mt-4 text-2xl font-bold text-gray-900">
+          {value}
+        </div>
+
         {type === 'temperature' && threshold && currentValue && (
-          <>
-            <div className="bg-gray-200 rounded-full h-2">
+          <div className="mt-3">
+            <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-500" 
+                className="bg-blue-500 h-2 rounded-full" 
                 style={{ width: getProgressWidth() }}
               />
             </div>
             <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>60°F</span>
-              <span>{threshold}°F</span>
+              <span>0°F</span>
+              <span>{threshold}°F Threshold</span>
             </div>
-          </>
+          </div>
         )}
 
-        {(type === 'motion' || type === 'crying') && (
+        {(type === 'object' || type === 'crying') && (
           <div className="flex items-center space-x-2 mt-3">
             <div className={cn(
               "w-2 h-2 rounded-full",

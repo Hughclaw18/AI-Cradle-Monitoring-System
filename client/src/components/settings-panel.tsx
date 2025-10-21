@@ -52,10 +52,10 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
             </div>
           </div>
 
-          {/* Motion Sensitivity */}
+          {/* Object Sensitivity */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="font-medium text-gray-700">Motion Sensitivity</label>
+              <label className="font-medium text-gray-700">Object Sensitivity</label>
               <span className="text-sm text-gray-500">
                 {getSensitivityLabel(settings.motionSensitivity)}
               </span>
@@ -150,8 +150,8 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
 
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Motion Alerts</div>
-                <div className="text-sm text-gray-500">Alert when motion is detected</div>
+                <div className="font-medium text-gray-800">Object Alerts</div>
+                <div className="text-sm text-gray-500">Alert when object is detected</div>
               </div>
               <Switch
                 checked={settings.motionAlerts}
