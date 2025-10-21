@@ -61,8 +61,30 @@ object_detected_input = st.multiselect(
     []
 )
 
+
 if st.button("Send Sensor Data"):
     if st.session_state.ws and st.session_state.ws.connected:
         send_sensor_data(st.session_state.ws, temperature_input, crying_detected_input, object_detected_input)
     else:
         st.warning("Please connect to WebSocket first.")
+
+st.subheader("Auto-send Random Sensor Data")
+auto_send_enabled = st.checkbox("Enable Auto-send (every 5 seconds)")
+
+if auto_send_enabled:
+    if st.session_state.ws and st.session_state.ws.connected:
+        st.write("Auto-sending random sensor data...")
+        # Use a non-blocking way to send data periodically
+        # Streamlit's rerun mechanism makes direct while loops problematic for UI updates
+        # For simplicity, we'll just send one random data point per rerun if enabled
+        random_temperature = round(random.uniform(70.0, 85.0), 2)
+        random_crying_detected = random.choice([True, False])
+        random_object_detected = []
+        if random.random() < 0.3: # 30% chance of object detection
+            random_object_detected.append(random.choice(["toy", "bottle", "blanket"]))
+
+        send_sensor_data(st.session_state.ws, random_temperature, random_crying_detected, random_object_detected)
+        time.sleep(5) # This will pause the Streamlit app for 5 seconds
+        st.experimental_rerun() # Rerun to send next data point
+    else:
+        st.warning("Connect to WebSocket to enable auto-send.")
