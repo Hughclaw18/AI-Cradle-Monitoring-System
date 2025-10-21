@@ -102,6 +102,10 @@ export function useWebSocket() {
     setNotifications(prev => prev.filter((_, i) => i !== index));
   };
 
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
   return {
     connected,
     sensorData,
@@ -110,5 +114,6 @@ export function useWebSocket() {
     settings,
     notifications,
     dismissNotification,
+    clearAllNotifications,
   };
 }

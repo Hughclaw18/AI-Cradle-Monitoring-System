@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square, ChevronDown } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard } from "lucide-react";
+import { getTimeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +34,7 @@ export default function Dashboard() {
     settings,
     notifications,
     dismissNotification,
+    clearAllNotifications,
   } = useWebSocket();
 
   const { permission, requestPermission, showAlert } = useNotifications();
@@ -194,16 +196,6 @@ export default function Dashboard() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const getTimeAgo = (timestamp: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - new Date(timestamp).getTime();
-    const seconds = Math.floor(diff / 1000);
-    
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-    return `${Math.floor(seconds / 3600)} hours ago`;
-  };
-
   return (
     <div className="max-w-sm mx-auto bg-white min-h-screen shadow-lg relative">
       {/* Status Bar */}
@@ -234,6 +226,16 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllNotifications}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                Clear All
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -243,7 +245,7 @@ export default function Dashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="dashboard" className="flex flex-col items-center p-2">
-              <Settings className="h-4 w-4 mb-1" />
+              <LayoutDashboard className="h-4 w-4 mb-1" />
               <span className="text-xs">Dashboard</span>
             </TabsTrigger>
             <TabsTrigger value="music" className="flex flex-col items-center p-2">
@@ -251,7 +253,7 @@ export default function Dashboard() {
               <span className="text-xs">Music</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="flex flex-col items-center p-2">
-              <Settings className="h-4 w-4 mb-1" />
+              <History className="h-4 w-4 mb-1" />
               <span className="text-xs">History</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex flex-col items-center p-2">
@@ -266,55 +268,45 @@ export default function Dashboard() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-semibold text-gray-800">System Status</h2>
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                    <span className={`text-sm font-medium ${connected ? 'text-green-600' : 'text-red-600'}`}>
-                      {connected ? 'Online' : 'Offline'}
-                    </span>
+                  <Button variant="outline" size="sm" className="text-sm">
+                    View Details
+                  </Button>
+                </div>
+                {sensorData && (
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
+                    <SensorCard
+                      type="temperature"
+                      value={`${Math.round(sensorData.temperature)}°F`}
+                      status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'High' : 'Normal'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isAlert={sensorData.temperature > (settings?.tempThreshold || 78)}
+                      threshold={settings?.tempThreshold}
+                      currentValue={sensorData.temperature}
+                    />
+                    
+                    
+                    <SensorCard
+                      type="object"
+                      value={sensorData.objectDetected && sensorData.objectDetected.length > 0 
+                        ? `${sensorData.objectDetected[0].object_name} at ${new Date(sensorData.objectDetected[0].timestamp).toLocaleTimeString()}` 
+                        : 'No Object'}
+                      status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Active' : 'Inactive'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isActive={!!(sensorData.objectDetected && sensorData.objectDetected.length > 0)}
+                    />
+                    
+                    <SensorCard
+                      type="crying"
+                      value={sensorData.cryingDetected ? 'Detected' : 'Silent'}
+                      status={sensorData.cryingDetected ? 'Crying' : 'Quiet'}
+                      timestamp={getTimeAgo(sensorData.timestamp)}
+                      isActive={sensorData.cryingDetected}
+                      isAlert={sensorData.cryingDetected}
+                    />
                   </div>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Last update: {sensorData ? getTimeAgo(sensorData.timestamp) : 'Never'}
-                </div>
+                )}
               </CardContent>
             </Card>
-
-            {/* Sensor Cards */}
-            <div className="space-y-4">
-              {sensorData && (
-                <>
-                  <SensorCard
-                    type="temperature"
-                    value={`${Math.round(sensorData.temperature)}°F`}
-                    status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'High' : 'Normal'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isAlert={sensorData.temperature > (settings?.tempThreshold || 78)}
-                    threshold={settings?.tempThreshold}
-                    currentValue={sensorData.temperature}
-                  />
-                  
-                  
-                  <SensorCard
-                    type="object"
-                    value={sensorData.objectDetected && sensorData.objectDetected.length > 0 
-                      ? `${sensorData.objectDetected[0].object_name} at ${new Date(sensorData.objectDetected[0].timestamp).toLocaleTimeString()}` 
-                      : 'No Object'}
-                    status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Active' : 'Inactive'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isActive={!!(sensorData.objectDetected && sensorData.objectDetected.length > 0)}
-                  />
-                  
-                  <SensorCard
-                    type="crying"
-                    value={sensorData.cryingDetected ? 'Detected' : 'Silent'}
-                    status={sensorData.cryingDetected ? 'Crying' : 'Quiet'}
-                    timestamp={getTimeAgo(sensorData.timestamp)}
-                    isActive={sensorData.cryingDetected}
-                    isAlert={sensorData.cryingDetected}
-                  />
-                </>
-              )}
-            </div>
 
             {/* Quick Actions */}
             <Card>
@@ -349,7 +341,7 @@ export default function Dashboard() {
           <TabsContent value="history" className="space-y-4 mt-4">
             <Card>
               <CardContent className="p-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-3">Detection History</h2>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Detection History</h2>
 
                 {/* Object Detections */}
                 <div className="border rounded-lg shadow-sm bg-white mb-4">
@@ -429,7 +421,7 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="settings" className="mt-4">
+          <TabsContent value="settings" className="space-y-4 mt-4">
             {settings && (
               <SettingsPanel
                 settings={settings}
@@ -459,6 +451,7 @@ export default function Dashboard() {
           message={notification.message}
           severity={notification.severity}
           onDismiss={() => dismissNotification(index)}
+          duration={8000} // Set duration to 8 seconds
         />
       ))}
     </div>

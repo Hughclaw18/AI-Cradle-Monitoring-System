@@ -346,7 +346,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const sendInitialData = async () => {
       try {
         const sensorData = await storage.getLatestSensorData();
-        const servoStatus = await storage.getLatestServoStatus();
         const musicStatus = await storage.getLatestMusicStatus();
         const settings = await storage.getSystemSettings();
 
@@ -355,7 +354,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'initial_data',
             data: {
               sensors: sensorData,
-              servo: servoStatus,
               music: musicStatus,
               settings: settings
             }
@@ -367,6 +365,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
 
     sendInitialData();
+
+    ws.on('message', async (message: string) => {
+      try {
+        const parsedMessage = JSON.parse(message);
+        if (parsedMessage.type === 'sensor_update') {
+          const sensorData = parsedMessage.data;
+          await storage.insertSensorData(sensorData);
+          broadcast({
+            type: 'sensor_update',
+            data: sensorData
+          });
+
+          // Check for alerts
+          const currentTime = Date.now();
+          const settings = await storage.getSystemSettings();
+
+          if (settings && sensorData.temperature > (settings.tempThreshold || 78) && (currentTime - lastTempAlertTime > 60 * 1000)) { // 1 minute delay
+            broadcast({
+              type: 'notification',
+              data: {
+                title: 'High Temperature Alert!',
+                message: `Temperature is ${sensorData.temperature}°F`,
+                severity: 'warning'
+              }
+            });
+            lastTempAlertTime = currentTime;
+          }
+
+          if (settings && sensorData.objectDetected && sensorData.objectDetected.length > 0 && (currentTime - lastObjectAlertTime > 30 * 1000)) { // 30 seconds delay
+            broadcast({
+              type: 'notification',
+              data: {
+                title: 'Object Detected!',
+                message: 'An object has been detected in the crib.',
+                severity: 'info'
+              }
+            });
+            lastObjectAlertTime = currentTime;
+          }
+
+          if (settings && sensorData.cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) {
+            broadcast({
+              type: 'notification',
+              data: {
+                title: 'Crying Detected!',
+                message: 'Baby is crying!',
+                severity: 'warning'
+              }
+            });
+            lastCryingAlertTime = currentTime;
+          }
+
+          // Auto-rocking based on crying
+          if (sensorData.cryingDetected && settings?.autoResponse) {
+            if (cryingPlaybackTimeout) {
+              clearTimeout(cryingPlaybackTimeout);
+              cryingPlaybackTimeout = null;
+            }
+
+            if (!cryingPlaybackActive) {
+              const musicStatus = await storage.getLatestMusicStatus();
+              if (!musicStatus?.isPlaying) {
+                if (musicStatus?.useSpotify && musicStatus?.spotifyPlaylistId) {
+                  try {
+                    const spotify = await getUncachableSpotifyClient();
+                    const device = await getSpotifyDevice(spotify);
+                    if (device?.id) {
+                      const currentTrackAfterCryingPlay = await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
+                      // Add a small delay to allow Spotify API to update playback state
+                      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+                      await storage.updateMusicStatus({
+                        isPlaying: true,
+                        currentTrack: currentTrackAfterCryingPlay?.name || null,
+                        currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
+                        currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
+                        currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
+                      });
+                      cryingPlaybackActive = true;
+                    }
+                  } catch (error) {
+                    console.error('Failed to auto-play Spotify:', error);
+                  }
+                }
+              }
+            }
+          } else if (cryingPlaybackActive && !sensorData.cryingDetected) {
+            if (!cryingPlaybackTimeout) {
+              cryingPlaybackTimeout = setTimeout(async () => {
+                console.log('Crying playback timeout reached, pausing music.');
+                const musicStatus = await storage.getLatestMusicStatus();
+                if (musicStatus?.isPlaying) {
+                  try {
+                    const spotify = await getUncachableSpotifyClient();
+                    const device = await getSpotifyDevice(spotify);
+                    if (device?.id) {
+                      await stopPlayback(device.id);
+                      await storage.updateMusicStatus({
+                        isPlaying: false,
+                        currentTrack: null,
+                        currentTrackArtist: null,
+                        currentTrackAlbum: null,
+                        currentTrackImageUrl: null,
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Failed to stop Spotify playback:', error);
+                  }
+                }
+                cryingPlaybackActive = false;
+                cryingPlaybackTimeout = null;
+              }, 100000);
+            }
+          } else if (!sensorData.cryingDetected && cryingPlaybackTimeout) {
+            clearTimeout(cryingPlaybackTimeout);
+            cryingPlaybackTimeout = null;
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    });
+
+    ws.on('close', () => {
+      clients.delete(ws);
+      console.log('Client disconnected from WebSocket');
+    });
 
     ws.on('close', () => {
       clients.delete(ws);
@@ -396,179 +520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   let cryingPlaybackActive = false; // New flag
   let cryingPlaybackTimeout: NodeJS.Timeout | null = null; // New timeout variable
 
-  setInterval(async () => {
-    try {
-      const settings = await storage.getSystemSettings();
-      
-      const newTemp = 72 + Math.random() * 6 - 3; // 69-75°F range
-      const objectDetected = Math.random() > 0.5 ? [{
-        object_name: "simulated_object",
-        timestamp: new Date().toISOString(),
-        detection_id: `sim_${Date.now()}`
-      }] : null; // Simulate object detection with an array of objects or null
-      const cryingDetected = Math.random() < (objectDetected ? 0.15 : 0.03);
-      
-      const sensorData: SensorData = {
-        id: Date.now(), // Add a unique ID for the sensor data
-        timestamp: new Date(),
-        temperature: Math.floor(Math.random() * 20) + 60, // 60-80°F
-        objectDetected: objectDetected,
-        cryingDetected: Math.random() > 0.8,
-      };
-      
-      await storage.insertSensorData(sensorData);
-      
-      // Check for alerts
-      const currentTime = Date.now();
 
-      if (settings && sensorData.temperature > (settings.tempThreshold || 78) && (currentTime - lastTempAlertTime > 60 * 1000)) { // 1 minute delay
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'High Temperature Alert!',
-            message: `Temperature is ${sensorData.temperature}°F`,
-            severity: 'warning'
-          }
-        });
-        lastTempAlertTime = currentTime;
-      }
-      
-      if (settings && sensorData.objectDetected && (currentTime - lastObjectAlertTime > 30 * 1000)) { // 30 seconds delay
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'Object Detected!',
-            message: 'An object has been detected in the crib.',
-            severity: 'info'
-          }
-        });
-        lastObjectAlertTime = currentTime;
-      }
-      
-      if (settings && sensorData.cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) {
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'Crying Detected!',
-            message: 'Baby is crying!',
-            severity: 'warning'
-          }
-        });
-        lastCryingAlertTime = currentTime;
-      }
-      
-      // Auto-rocking based on crying
-      if (cryingDetected && settings?.autoResponse) {
-        if (cryingPlaybackTimeout) {
-          clearTimeout(cryingPlaybackTimeout);
-          cryingPlaybackTimeout = null;
-        }
-
-        if (!cryingPlaybackActive) {
-          const musicStatus = await storage.getLatestMusicStatus();
-          if (!musicStatus?.isPlaying) {
-            if (musicStatus?.useSpotify && musicStatus?.spotifyPlaylistId) {
-              try {
-                const spotify = await getUncachableSpotifyClient();
-                const device = await getSpotifyDevice(spotify);
-                  if (device?.id) {
-                    const currentTrackAfterCryingPlay = await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
-                    // Add a small delay to allow Spotify API to update playback state
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-                    await storage.updateMusicStatus({
-                      isPlaying: true,
-                      currentTrack: currentTrackAfterCryingPlay?.name || null,
-                      currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
-                      currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
-                      currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
-                  });
-                  cryingPlaybackActive = true;
-                }
-              } catch (error) {
-                console.error('Failed to auto-play Spotify:', error);
-              }
-            }
-          }
-        }
-      } else if (cryingPlaybackActive && !cryingDetected) {
-        if (!cryingPlaybackTimeout) {
-          cryingPlaybackTimeout = setTimeout(async () => {
-            console.log('Crying playback timeout reached, pausing music.');
-            const musicStatus = await storage.getLatestMusicStatus();
-            if (musicStatus?.isPlaying) {
-              try {
-                const spotify = await getUncachableSpotifyClient();
-                const device = await getSpotifyDevice(spotify);
-                if (device?.id) {
-                  await stopPlayback(device.id);
-                  await storage.updateMusicStatus({
-                    isPlaying: false,
-                    currentTrack: null,
-                    currentTrackArtist: null,
-                    currentTrackAlbum: null,
-                    currentTrackImageUrl: null,
-                  });
-                }
-              } catch (error) {
-                console.error('Failed to stop Spotify playback:', error);
-              }
-            }
-            cryingPlaybackActive = false;
-            cryingPlaybackTimeout = null;
-          }, 100000);
-        }
-      } else if (!cryingDetected && cryingPlaybackTimeout) {
-        clearTimeout(cryingPlaybackTimeout);
-        cryingPlaybackTimeout = null;
-      }
-
-      lastCryingState = cryingDetected;
-
-      if (settings?.tempAlerts && newTemp > settings.tempThreshold && (currentTime - lastTempAlertTime > 60 * 1000)) {
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'Temperature Alert',
-            message: `Temperature is ${newTemp.toFixed(1)}°F, above threshold of ${settings.tempThreshold}°F`,
-            severity: 'warning'
-          }
-        });
-        lastTempAlertTime = currentTime;
-      }
-
-      if (settings?.motionAlerts && objectDetected && (currentTime - lastObjectAlertTime > 30 * 1000)) {
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'Object Detected',
-            message: 'Object detected in the baby\'s room',
-            severity: 'info'
-          }
-        });
-        lastObjectAlertTime = currentTime;
-      }
-
-      if (cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) {
-        broadcast({
-          type: 'notification',
-          data: {
-            title: 'Baby is Crying',
-            message: settings?.autoResponse ? 'Music has been started automatically' : 'Please check on the baby',
-            severity: 'warning'
-          }
-        });
-        lastCryingAlertTime = currentTime;
-      }
-
-      broadcast({
-        type: 'sensor_update',
-        data: sensorData
-      });
-
-    } catch (error) {
-      console.error('Error in sensor simulation:', error);
-    }
-  }, 2000);
 
   // Simulate servo position updates for auto-rock
   setInterval(async () => {
