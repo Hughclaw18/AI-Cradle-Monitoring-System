@@ -71,7 +71,7 @@ export class MemStorage implements IStorage {
     this.sensorData.push({
       id: 1,
       temperature: 72.5,
-      motionDetected: false,
+      objectDetected: null,
       cryingDetected: false,
       timestamp: new Date(),
     });
@@ -108,7 +108,7 @@ export class MemStorage implements IStorage {
       id: this.currentId++,
       timestamp: new Date(),
       temperature: data.temperature,
-      motionDetected: data.motionDetected === undefined ? false : data.motionDetected,
+      objectDetected: data.objectDetected === undefined ? null : data.objectDetected,
       cryingDetected: data.cryingDetected === undefined ? false : data.cryingDetected,
     };
     this.sensorData.push(newData);

@@ -108,18 +108,23 @@ export async function getUncachableSpotifyClient() {
 
 export async function getCurrentlyPlayingTrack() {
   const spotify = await getUncachableSpotifyClient();
-  const currentPlayback = await spotify.player.getCurrentlyPlayingTrack();
-  console.log("Spotify API - Currently Playing Track:", currentPlayback);
-  if (currentPlayback && currentPlayback.item && currentPlayback.item.type === "track") {
-    const track = currentPlayback.item as SpotifyApiModule.Track;
-    return {
-      name: track.name,
-      artist: track.artists.map((artist: { name: any; }) => artist.name).join(", "),
-      album: track.album.name,
-      imageUrl: track.album.images[0]?.url || undefined,
-    };
+  try {
+    const currentPlayback = await spotify.player.getCurrentlyPlayingTrack();
+    console.log("Spotify API - Currently Playing Track:", currentPlayback);
+    if (currentPlayback && currentPlayback.item && currentPlayback.item.type === "track") {
+      const track = currentPlayback.item as SpotifyApiModule.Track;
+      return {
+        name: track.name,
+        artist: track.artists.map((artist: { name: any; }) => artist.name).join(", "),
+        album: track.album.name,
+        imageUrl: track.album.images[0]?.url || undefined,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting currently playing track:", error);
+    return null;
   }
-  return null;
 }
 
 export async function isSpotifyConnected(): Promise<boolean> {
@@ -128,5 +133,145 @@ export async function isSpotifyConnected(): Promise<boolean> {
     return true;
   } catch (error) {
     return false;
+  }
+}
+
+export async function stopPlayback(deviceId?: string) {
+  const spotify = await getUncachableSpotifyClient();
+  try {
+    const currentPlaybackState = await spotify.player.getPlaybackState();
+    const activeDeviceId = currentPlaybackState?.device?.id;
+
+    // Temporarily cast actions to any to bypass TypeScript error regarding 'disallows'
+    const actions: any = currentPlaybackState?.actions;
+
+    console.log("currentPlaybackState.actions:", currentPlaybackState?.actions);
+    console.log("actions?.disallows?.pausing:", actions?.disallows?.pausing);
+
+    if (deviceId && activeDeviceId && deviceId === activeDeviceId) {
+      if (actions?.disallows?.pausing) {
+        console.warn("Device does not support remote pause — skipping.");
+        return;
+      }
+    } else if (!deviceId && actions?.disallows?.pausing) {
+      console.warn("Active device does not support remote pause — skipping.");
+      return;
+    }
+
+    const targetDeviceId = deviceId || activeDeviceId;
+
+    if (targetDeviceId) {
+        await spotify.player.pausePlayback(targetDeviceId);
+    } else {
+        console.warn("No device ID provided or active device found to pause playback.");
+        return;
+    }
+    console.log("Stopped playback successfully.");
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      console.warn("Spotify pause successful, invalid JSON response ignored");
+    } else {
+      throw error; // Let other errors propagate
+    }
+  }
+}
+
+export async function skipToNextTrack(deviceId?: string) {
+  const spotify = await getUncachableSpotifyClient();
+  try {
+    const currentPlaybackState = await spotify.player.getPlaybackState();
+    const activeDeviceId = currentPlaybackState?.device?.id;
+    const targetDeviceId = deviceId || activeDeviceId;
+
+    if (targetDeviceId) {
+      await spotify.player.skipToNext(targetDeviceId);
+      console.log("Skipped to next track successfully.");
+    } else {
+      console.warn("No device ID provided or active device found to skip to next track.");
+    }
+  } catch (error) {
+    console.error("Error skipping to next track:", error);
+  }
+}
+
+export async function skipToPreviousTrack(deviceId?: string) {
+  const spotify = await getUncachableSpotifyClient();
+  try {
+    const currentPlaybackState = await spotify.player.getPlaybackState();
+    const activeDeviceId = currentPlaybackState?.device?.id;
+    const targetDeviceId = deviceId || activeDeviceId;
+
+    if (targetDeviceId) {
+      await spotify.player.skipToPrevious(targetDeviceId);
+      console.log("Skipped to previous track successfully.");
+    } else {
+      console.warn("No device ID provided or active device found to skip to previous track.");
+    }
+  } catch (error) {
+    console.error("Error skipping to previous track:", error);
+  }
+}
+
+export async function startPlaylistPlayback(deviceId?: string, playlistId?: string) {
+  const spotify = await getUncachableSpotifyClient();
+  try {
+    const currentPlaybackState = await spotify.player.getPlaybackState();
+    const activeDeviceId = currentPlaybackState?.device?.id;
+    const targetDeviceId = deviceId || activeDeviceId;
+
+    if (!targetDeviceId) {
+      console.warn("No device ID provided or active device found to start playback.");
+      return false;
+    }
+
+    if (playlistId) {
+      console.log("Attempting to start playback with deviceId:", targetDeviceId, "and playlistId:", playlistId);
+      await spotify.player.startResumePlayback(targetDeviceId, `spotify:playlist:${playlistId}`);
+    } else {
+      console.log("Attempting to start playback with deviceId:", targetDeviceId, "(no playlistId specified)");
+      await spotify.player.startResumePlayback(targetDeviceId);
+    }
+    console.log("Started playback successfully.");
+    // Add a small delay to allow Spotify API to update playback state
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
+    const currentTrack = await getCurrentlyPlayingTrack();
+    return currentTrack;
+  } catch (error) {
+    console.error("Error starting playback:", error);
+    return null;
+  }
+}
+
+export async function getSpotifyDevice(spotify: SpotifyApiModule.SpotifyApi, deviceId?: string): Promise<SpotifyApiModule.Device | undefined> {
+  try {
+    let devices: SpotifyApiModule.Device[] = [];
+    try {
+      const result = await spotify.player.getAvailableDevices();
+      devices = result.devices;
+    } catch (deviceError) {
+      console.error("Error fetching available Spotify devices:", deviceError);
+      // If fetching devices fails, we can't proceed, so return undefined
+      return undefined;
+    }
+    console.log("Available Spotify devices:", devices);
+
+    if (deviceId) {
+      const targetDevice = devices.find(d => d.id === deviceId);
+      if (targetDevice) {
+        return targetDevice;
+      }
+    }
+
+    // Prioritize active device
+    const activeDevice = devices.find(d => d.is_active);
+    if (activeDevice) {
+      return activeDevice;
+    }
+
+    // Otherwise, return the first available device
+    return devices[0];
+  } catch (error) {
+    console.error("Error in getSpotifyDevice:", error);
+    return undefined;
   }
 }

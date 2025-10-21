@@ -4,11 +4,18 @@ import { z } from "zod";
 
 export const sensorData = pgTable("sensor_data", {
   id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
   temperature: real("temperature").notNull(),
-  motionDetected: boolean("motion_detected").notNull().default(false),
+  objectDetected: text("object_detected").$type<{
+    object_name: string;
+    timestamp: string;
+    detection_id: string;
+  }[] | null>(),
   cryingDetected: boolean("crying_detected").notNull().default(false),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
+
+export type SensorData = typeof sensorData.$inferSelect;
+export type InsertSensorData = typeof sensorData.$inferInsert;
 
 export const servoStatus = pgTable("servo_status", {
   id: serial("id").primaryKey(),
@@ -79,8 +86,7 @@ export const insertTrackSchema = createInsertSchema(tracks).omit({
 });
 
 // Types
-export type SensorData = typeof sensorData.$inferSelect;
-export type InsertSensorData = z.infer<typeof insertSensorDataSchema>;
+
 
 export type ServoStatus = typeof servoStatus.$inferSelect;
 export type InsertServoStatus = z.infer<typeof insertServoStatusSchema>;
@@ -93,3 +99,9 @@ export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
 
 export type Track = typeof tracks.$inferSelect;
 export type InsertTrack = z.infer<typeof insertTrackSchema>;
+
+export interface NotificationData {
+  title: string;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+}

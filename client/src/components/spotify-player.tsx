@@ -21,6 +21,7 @@ export function SpotifyPlayer({ musicStatus }: SpotifyPlayerProps) {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
   const { toast } = useToast();
 
+  console.log("Music Status in SpotifyPlayer:", musicStatus);
   // Fetch available Spotify devices
   interface UserDevice {
   id: string;
@@ -31,8 +32,6 @@ export function SpotifyPlayer({ musicStatus }: SpotifyPlayerProps) {
   type: string;
   volume_percent: number;
 }
-
-// ... existing code ...
 
 const { data: devices } = useQuery<UserDevice[]>({
     queryKey: ["spotifyDevices"],
@@ -49,7 +48,7 @@ const { data: devices } = useQuery<UserDevice[]>({
   const playMutation = useMutation({
     mutationFn: () => {
       console.log("Sending play request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/play", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player/play", { deviceId: selectedDeviceId });
     },
     onSuccess: () => {
       toast({
@@ -72,7 +71,7 @@ const { data: devices } = useQuery<UserDevice[]>({
   const pauseMutation = useMutation({
     mutationFn: () => {
       console.log("Sending pause request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/pause", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player/pause", { deviceId: selectedDeviceId });
     },
     onSuccess: () => {
       toast({
@@ -95,7 +94,10 @@ const { data: devices } = useQuery<UserDevice[]>({
   const nextMutation = useMutation({
     mutationFn: () => {
       console.log("Sending next request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/next", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player/next", {
+      action: "next",
+      deviceId: selectedDeviceId,
+    });
     },
     onSuccess: () => {
       toast({
@@ -118,7 +120,10 @@ const { data: devices } = useQuery<UserDevice[]>({
   const previousMutation = useMutation({
     mutationFn: () => {
       console.log("Sending previous request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/previous", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player/previous", {
+      action: "previous",
+      deviceId: selectedDeviceId,
+    });
     },
     onSuccess: () => {
       toast({

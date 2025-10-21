@@ -2,45 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertSystemSettingsSchema, insertMusicStatusSchema, insertServoStatusSchema } from "@shared/schema";
+import { insertSystemSettingsSchema, insertMusicStatusSchema, insertServoStatusSchema, SensorData } from "@shared/schema";
 import { z } from "zod";
-import { getUncachableSpotifyClient, isSpotifyConnected, getSpotifyAuthUrl, exchangeCodeForTokens, getCurrentlyPlayingTrack } from "./spotify";
-// Use the official types from the Spotify SDK
+import { getSpotifyDevice, getUncachableSpotifyClient, isSpotifyConnected, getSpotifyAuthUrl, exchangeCodeForTokens, getCurrentlyPlayingTrack, skipToNextTrack, skipToPreviousTrack, startPlaylistPlayback, stopPlayback } from "./spotify";
 import type { SpotifyApi, Device } from "@spotify/web-api-ts-sdk";
-
-/**
- * A helper function to find the target Spotify device ID.
- * It prioritizes the requested device, falls back to the first available device,
- * and handles the case where no devices are found.
- * @param spotify - The Spotify API client instance.
- * @param requestedDeviceId - The optional device ID from the request.
- * @returns A promise that resolves to the device ID string or null if no device is found.
- */
-async function getSpotifyDevice(spotify: SpotifyApi, requestedDeviceId?: string): Promise<Device | null> {
-  const devicesResponse = await spotify.player.getAvailableDevices();
-  const availableDevices = devicesResponse.devices;
-
-  if (requestedDeviceId) {
-    const foundRequestedDevice = availableDevices.find((d) => d.id === requestedDeviceId);
-    if (foundRequestedDevice && foundRequestedDevice.is_active) {
-      return foundRequestedDevice;
-    }
-  }
-
-  // If no requested device or it's not active, find the first active device
-  const activeDevice = availableDevices.find((d) => d.is_active);
-  if (activeDevice) {
-    return activeDevice;
-  }
-
-  // Fallback to the first available device if no active device is found
-  if (availableDevices.length > 0) {
-    return availableDevices[0];
-  }
-
-  return null; // No devices available
-}
-
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -109,14 +74,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentTrackArtist: currentTrack.artist,
               currentTrackAlbum: currentTrack.album,
               currentTrackImageUrl: currentTrack.imageUrl,
+              isPlaying: true, // Set isPlaying to true if a track is returned
+              spotifyConnected: true, // Confirm spotify is connected if a track is returned
             }
           : {
               currentTrack: null,
               currentTrackArtist: null,
               currentTrackAlbum: null,
               currentTrackImageUrl: null,
+              isPlaying: false, // Set isPlaying to false if no track is returned
+              spotifyConnected: true, // Still connected, just nothing playing
             };
         status = await storage.updateMusicStatus(updateData);
+        broadcast({ type: 'music_status_update', data: status });
       }
 
       res.json(status);
@@ -220,6 +190,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Consolidated endpoint for all Spotify playback controls
+
+
   app.post("/api/spotify/player", async (req, res) => {
     const { action, deviceId, playlistId } = req.body as {
       action: 'play' | 'pause' | 'next' | 'previous';
@@ -228,48 +200,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
 
     if (!action) {
-        return res.status(400).json({ error: "Player action is required" });
+      return res.status(400).json({ error: "Player action is required" });
     }
 
     try {
-        const spotify = await getUncachableSpotifyClient();
-        const targetDevice = await getSpotifyDevice(spotify, deviceId);
+      const spotify = await getUncachableSpotifyClient();
+      const targetDevice = await getSpotifyDevice(spotify, deviceId);
 
-        if (!targetDevice?.id) {
-            return res.status(404).json({ error: "No active Spotify device found." });
-        }
+      if (!targetDevice?.id) {
+        return res.status(404).json({ error: "No active Spotify device found." });
+      }
 
-        switch (action) {
-            case 'play':
-                console.log("Playing/Resuming playback on device:", targetDevice.id, "with playlistId:", playlistId);
-                if (playlistId) {
-                    await spotify.player.startResumePlayback(targetDevice.id, `spotify:playlist:${playlistId}`);
-                } else {
-                    await spotify.player.startResumePlayback(targetDevice.id);
-                }
-                await storage.updateMusicStatus({ isPlaying: true });
-                break;
-            case 'pause':
-                console.log("Pausing playback on device:", targetDevice.id);
-                await spotify.player.pausePlayback(targetDevice.id);
-                await storage.updateMusicStatus({ isPlaying: false });
-                break;
-            case 'next':
-                console.log("Skipping to next track on device:", targetDevice.id);
-                await spotify.player.skipToNext(targetDevice.id);
-                break;
-            case 'previous':
-                console.log("Skipping to previous track on device:", targetDevice.id);
-                await spotify.player.skipToPrevious(targetDevice.id);
-                break;
-            default:
-                return res.status(400).json({ error: "Invalid player action." });
-        }
+      // Transfer playback to target device before any playback action
+      try {
+        await spotify.player.transferPlayback([targetDevice.id], false);
+        console.log(`Playback transferred to device: ${targetDevice.id}`);
+      } catch (transferError) {
+        console.error("Error transferring playback:", transferError);
+        return res.status(500).json({ error: "Failed to transfer playback", details: transferError });
+      }
 
-        res.json({ success: true, message: `Action '${action}' successful on device ${targetDevice.name}.` });
+      switch (action) {
+        case 'play':
+          try {
+            console.log("Starting playback on device:", targetDevice.id, "with playlistId:", playlistId);
+            await startPlaylistPlayback(targetDevice.id, playlistId);
+            const currentTrackAfterPlay = await getCurrentlyPlayingTrack();
+            await storage.updateMusicStatus({
+              isPlaying: true,
+              currentTrack: currentTrackAfterPlay?.name || null,
+              currentTrackArtist: currentTrackAfterPlay?.artist || null,
+              currentTrackAlbum: currentTrackAfterPlay?.album || null,
+              currentTrackImageUrl: currentTrackAfterPlay?.imageUrl || null,
+              spotifyConnected: true,
+            });
+          } catch (playError) {
+            console.error("Error starting playback:", playError);
+            return res.status(500).json({ error: "Failed to start playback", details: playError });
+          }
+          break;
+
+        case 'pause':
+          try {
+            console.log("Pausing playback on device:", targetDevice.id);
+            await stopPlayback(targetDevice.id);
+            await storage.updateMusicStatus({
+              isPlaying: false,
+              currentTrack: null,
+              currentTrackArtist: null,
+              currentTrackAlbum: null,
+              currentTrackImageUrl: null,
+            });
+          } catch (pauseError) {
+            console.error("Error pausing playback:", pauseError);
+            return res.status(500).json({ error: "Failed to pause playback", details: pauseError });
+          }
+          break;
+
+        case 'next':
+          try {
+            console.log("Skipping to next track on device:", targetDevice.id);
+            await skipToNextTrack(targetDevice.id);
+            const currentTrackAfterNext = await getCurrentlyPlayingTrack();
+            await storage.updateMusicStatus({
+              isPlaying: true,
+              currentTrack: currentTrackAfterNext?.name || null,
+              currentTrackArtist: currentTrackAfterNext?.artist || null,
+              currentTrackAlbum: currentTrackAfterNext?.album || null,
+              currentTrackImageUrl: currentTrackAfterNext?.imageUrl || null,
+              spotifyConnected: true,
+            });
+          } catch (nextError) {
+            console.error("Error skipping to next track:", nextError);
+            return res.status(500).json({ error: "Failed to skip to next track", details: nextError });
+          }
+          break;
+
+        case 'previous':
+          try {
+            console.log("Skipping to previous track on device:", targetDevice.id);
+            await skipToPreviousTrack(targetDevice.id);
+            const currentTrackAfterPrevious = await getCurrentlyPlayingTrack();
+            await storage.updateMusicStatus({
+              isPlaying: true,
+              currentTrack: currentTrackAfterPrevious?.name || null,
+              currentTrackArtist: currentTrackAfterPrevious?.artist || null,
+              currentTrackAlbum: currentTrackAfterPrevious?.album || null,
+              currentTrackImageUrl: currentTrackAfterPrevious?.imageUrl || null,
+              spotifyConnected: true,
+            });
+          } catch (prevError) {
+            console.error("Error skipping to previous track:", prevError);
+            return res.status(500).json({ error: "Failed to skip to previous track", details: prevError });
+          }
+          break;
+
+        default:
+          return res.status(400).json({ error: "Invalid player action." });
+      }
+
+      res.json({ success: true, message: `Action '${action}' successful on device ${targetDevice.name}.` });
     } catch (error: any) {
-        console.error(`Error performing Spotify action '${action}':`, error);
-        res.status(500).json({ error: `Failed to perform action: ${action}`, message: error.message || "Unknown error" });
+      console.error(`Error performing Spotify action '${req.body.action}':`, error);
+      res.status(500).json({ error: `Failed to perform action: ${req.body.action}`, message: error.message || "Unknown error" });
     }
   });
 
@@ -355,21 +388,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // --- Simulation Logic ---
 
+  let lastCryingAlertTime = 0;
+  let lastObjectAlertTime = 0;
+  let lastTempAlertTime = 0;
+  let lastCryingState: boolean = false;
+
   // Simulate real-time sensor data updates
   setInterval(async () => {
     try {
       const settings = await storage.getSystemSettings();
       
       const newTemp = 72 + Math.random() * 6 - 3; // 69-75°F range
-      const motionDetected = Math.random() < 0.05;
-      const cryingDetected = Math.random() < (motionDetected ? 0.15 : 0.03);
+      const objectDetected = Math.random() > 0.5 ? [{
+        object_name: "simulated_object",
+        timestamp: new Date().toISOString(),
+        detection_id: `sim_${Date.now()}`
+      }] : null; // Simulate object detection with an array of objects or null
+      const cryingDetected = Math.random() < (objectDetected ? 0.15 : 0.03);
       
-      const sensorData = await storage.insertSensorData({
-        temperature: newTemp,
-        motionDetected,
-        cryingDetected,
-      });
+      const sensorData: SensorData = {
+        id: Date.now(), // Add a unique ID for the sensor data
+        timestamp: new Date(),
+        temperature: Math.floor(Math.random() * 20) + 60, // 60-80°F
+        objectDetected: objectDetected,
+        cryingDetected: Math.random() > 0.8,
+      };
+      
+      await storage.insertSensorData(sensorData);
+      
+      // Check for alerts
+      const currentTime = Date.now();
 
+      if (settings && sensorData.temperature > (settings.tempThreshold || 78) && (currentTime - lastTempAlertTime > 60 * 1000)) { // 1 minute delay
+        broadcast({
+          type: 'notification',
+          data: {
+            title: 'High Temperature Alert!',
+            message: `Temperature is ${sensorData.temperature}°F`,
+            severity: 'warning'
+          }
+        });
+        lastTempAlertTime = currentTime;
+      }
+      
+      if (settings && sensorData.objectDetected && (currentTime - lastObjectAlertTime > 30 * 1000)) { // 30 seconds delay
+        broadcast({
+          type: 'notification',
+          data: {
+            title: 'Object Detected!',
+            message: 'An object has been detected in the crib.',
+            severity: 'info'
+          }
+        });
+        lastObjectAlertTime = currentTime;
+      }
+      
+      if (settings && sensorData.cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) { // 30 seconds delay
+        broadcast({
+          type: 'notification',
+          data: {
+            title: 'Crying Detected!',
+            message: 'Baby is crying!',
+            severity: 'warning'
+          }
+        });
+        lastCryingAlertTime = currentTime;
+      }
+      
+      // Auto-rocking based on crying
       if (cryingDetected && settings?.autoResponse) {
         const musicStatus = await storage.getLatestMusicStatus();
         if (!musicStatus?.isPlaying) {
@@ -378,20 +464,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const spotify = await getUncachableSpotifyClient();
               const device = await getSpotifyDevice(spotify);
               if (device?.id) {
-                await spotify.player.startResumePlayback(
-                  device.id,
-                  `spotify:playlist:${musicStatus.spotifyPlaylistId}`
-                );
-                await storage.updateMusicStatus({ isPlaying: true });
+                await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
+                const currentTrackAfterCryingPlay = await getCurrentlyPlayingTrack();
+                await storage.updateMusicStatus({
+                  isPlaying: true,
+                  currentTrack: currentTrackAfterCryingPlay?.name || null,
+                  currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
+                  currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
+                  currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
+                });
               }
             } catch (error) {
               console.error('Failed to auto-play Spotify:', error);
             }
           }
         }
+      } else if (lastCryingState && !cryingDetected) {
+        // If crying stopped, stop Spotify playback
+        const musicStatus = await storage.getLatestMusicStatus();
+        if (musicStatus?.isPlaying) {
+          try {
+            const spotify = await getUncachableSpotifyClient();
+            const device = await getSpotifyDevice(spotify);
+            if (device?.id) {
+              await stopPlayback(device.id);
+              await storage.updateMusicStatus({
+                isPlaying: false,
+                currentTrack: null,
+                currentTrackArtist: null,
+                currentTrackAlbum: null,
+                currentTrackImageUrl: null,
+              });
+            }
+          } catch (error) {
+            console.error('Failed to stop Spotify playback:', error);
+          }
+        }
       }
 
-      if (settings?.tempAlerts && newTemp > settings.tempThreshold) {
+      lastCryingState = cryingDetected;
+
+      if (settings?.tempAlerts && newTemp > settings.tempThreshold && (currentTime - lastTempAlertTime > 60 * 1000)) {
         broadcast({
           type: 'notification',
           data: {
@@ -400,20 +513,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             severity: 'warning'
           }
         });
+        lastTempAlertTime = currentTime;
       }
 
-      if (settings?.motionAlerts && motionDetected) {
+      if (settings?.motionAlerts && objectDetected && (currentTime - lastObjectAlertTime > 30 * 1000)) {
         broadcast({
           type: 'notification',
           data: {
-            title: 'Motion Detected',
-            message: 'Movement detected in the baby\'s room',
+            title: 'Object Detected',
+            message: 'Object detected in the baby\'s room',
             severity: 'info'
           }
         });
+        lastObjectAlertTime = currentTime;
       }
 
-      if (cryingDetected) {
+      if (cryingDetected && (currentTime - lastCryingAlertTime > 30 * 1000)) {
         broadcast({
           type: 'notification',
           data: {
@@ -422,6 +537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             severity: 'warning'
           }
         });
+        lastCryingAlertTime = currentTime;
       }
 
       broadcast({

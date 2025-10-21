@@ -238,12 +238,15 @@ export default function Dashboard() {
                     currentValue={sensorData.temperature}
                   />
                   
+                  
                   <SensorCard
-                    type="motion"
-                    value={sensorData.motionDetected ? 'Motion' : 'No Motion'}
-                    status={sensorData.motionDetected ? 'Active' : 'Inactive'}
+                    type="object"
+                    value={sensorData.objectDetected && sensorData.objectDetected.length > 0 
+                      ? `${sensorData.objectDetected[0].object_name} at ${new Date(sensorData.objectDetected[0].timestamp).toLocaleTimeString()}` 
+                      : 'No Object'}
+                    status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Active' : 'Inactive'}
                     timestamp={getTimeAgo(sensorData.timestamp)}
-                    isActive={sensorData.motionDetected}
+                    isActive={!!(sensorData.objectDetected && sensorData.objectDetected.length > 0)}
                   />
                   
                   <SensorCard
