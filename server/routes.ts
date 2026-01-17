@@ -87,7 +87,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
         status = await storage.updateMusicStatus(updateData);
         console.log("Broadcasting music status update:", status);
-        broadcast({ type: 'music_status_update', data: status });
+        broadcast({ type: 'music_update', data: status });
       }
 
       res.json(status);
