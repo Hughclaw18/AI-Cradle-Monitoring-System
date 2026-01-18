@@ -88,18 +88,16 @@ export class MemStorage implements IStorage {
     // Initialize with default music status
     this.musicStatus.push({
       id: 1,
-      currentTrack: "Brahms Lullaby",
+      isPlaying: false,
+      volume: 50,
+      currentTrack: null,
       currentTrackArtist: null,
       currentTrackAlbum: null,
       currentTrackImageUrl: null,
-      isPlaying: false,
-      volume: 65,
-      progress: 0,
       spotifyConnected: false,
       spotifyPlaylistId: null,
       spotifyPlaylistName: null,
       useSpotify: false,
-      timestamp: new Date(),
     });
   }
 

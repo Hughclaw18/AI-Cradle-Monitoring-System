@@ -178,7 +178,7 @@ export default function Dashboard() {
   const handleStartLullaby = () => {
     updateMusicMutation.mutate({
       isPlaying: true,
-      currentTrack: "Brahms Lullaby", // Updated to a hardcoded value
+      currentTrack: null, // Updated to a hardcoded value
     });
   };
 

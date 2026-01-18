@@ -93,6 +93,6 @@ if auto_send_enabled:
 
         send_sensor_data(st.session_state.ws, random_temperature, random_crying_detected, random_object_detected)
         time.sleep(5) # This will pause the Streamlit app for 5 seconds
-        st.experimental_rerun() # Rerun to send next data point
+        st.rerun() # Rerun to send next data point
     else:
         st.warning("Connect to WebSocket to enable auto-send.")
