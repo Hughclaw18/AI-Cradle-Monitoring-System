@@ -88,8 +88,10 @@ export class MemStorage implements IStorage {
     // Initialize with default music status
     this.musicStatus.push({
       id: 1,
+      timestamp: new Date(),
       isPlaying: false,
       volume: 50,
+      progress: 0,
       currentTrack: null,
       currentTrackArtist: null,
       currentTrackAlbum: null,
