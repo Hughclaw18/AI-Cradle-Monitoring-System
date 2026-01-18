@@ -161,18 +161,18 @@ export async function stopPlayback(deviceId?: string) {
     const targetDeviceId = deviceId || activeDeviceId;
 
     if (targetDeviceId) {
+      try {
         await spotify.player.pausePlayback(targetDeviceId);
+      } catch (pauseError) {
+        console.error("Error during pausePlayback:", pauseError);
+      }
     } else {
-        console.warn("No device ID provided or active device found to pause playback.");
-        return;
+      console.warn("No device ID provided or active device found to pause playback.");
+      return;
     }
     console.log("Stopped playback successfully.");
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      console.warn("Spotify pause successful, invalid JSON response ignored");
-    } else {
-      throw error; // Let other errors propagate
-    }
+    console.error("Error in stopPlayback:", error);
   }
 }
 
@@ -224,11 +224,22 @@ export async function startPlaylistPlayback(deviceId?: string, playlistId?: stri
       return null;
     }
 
-    if (playlistId) {
-      console.log("Attempting to start playback with deviceId:", targetDeviceId, "and playlistId:", playlistId);
-      await spotify.player.startResumePlayback(targetDeviceId, `spotify:playlist:${playlistId}`);
+    const currentContextUri = currentPlaybackState?.context?.uri;
+    const playlistContextUri = playlistId ? `spotify:playlist:${playlistId}` : undefined;
+    const isSameContext = !!playlistContextUri && currentContextUri === playlistContextUri;
+    const isPausedOnTarget =
+      currentPlaybackState?.device?.id === targetDeviceId &&
+      currentPlaybackState?.is_playing === false &&
+      !!currentPlaybackState?.item;
+
+    if (isPausedOnTarget && isSameContext) {
+      console.log("Resuming existing playlist playback on device:", targetDeviceId);
+      await spotify.player.startResumePlayback(targetDeviceId);
+    } else if (playlistId) {
+      console.log("Starting playlist playback with deviceId:", targetDeviceId, "and playlistId:", playlistId);
+      await spotify.player.startResumePlayback(targetDeviceId, playlistContextUri);
     } else {
-      console.log("Attempting to start playback with deviceId:", targetDeviceId, "(no playlistId specified)");
+      console.log("Resuming playback with deviceId:", targetDeviceId, "(no playlistId specified)");
       await spotify.player.startResumePlayback(targetDeviceId);
     }
     console.log("Started playback successfully.");

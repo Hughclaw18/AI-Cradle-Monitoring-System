@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertSystemSettingsSchema, insertMusicStatusSchema, insertServoStatusSchema, SensorData } from "@shared/schema";
+import { insertSystemSettingsSchema, insertMusicStatusSchema, insertServoStatusSchema, SensorData, MusicStatus } from "@shared/schema";
 import { z } from "zod";
 import { getSpotifyDevice, getUncachableSpotifyClient, isSpotifyConnected, getSpotifyAuthUrl, exchangeCodeForTokens, getCurrentlyPlayingTrack, skipToNextTrack, skipToPreviousTrack, startPlaylistPlayback, stopPlayback } from "./spotify";
 import type { SpotifyApi, Device } from "@spotify/web-api-ts-sdk";
@@ -74,20 +74,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentTrackArtist: currentTrack.artist,
               currentTrackAlbum: currentTrack.album,
               currentTrackImageUrl: currentTrack.imageUrl,
-              isPlaying: true, // Set isPlaying to true if a track is returned
-              spotifyConnected: true, // Confirm spotify is connected if a track is returned
+              isPlaying: true,
+              spotifyConnected: true,
             }
           : {
               currentTrack: null,
               currentTrackArtist: null,
               currentTrackAlbum: null,
               currentTrackImageUrl: null,
-              isPlaying: false, // Set isPlaying to false if no track is returned
-              spotifyConnected: true, // Still connected, just nothing playing
+              isPlaying: false,
+              spotifyConnected: true,
             };
         status = await storage.updateMusicStatus(updateData);
         console.log("Broadcasting music status update:", status);
-        broadcast({ type: 'music_status_update', data: status });
+        broadcastMusicStatus(status);
       }
 
       res.json(status);
@@ -101,6 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const musicStatus = insertMusicStatusSchema.partial().parse(req.body);
       const status = await storage.updateMusicStatus(musicStatus);
+      broadcastMusicStatus(status);
       res.json(status);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -183,6 +184,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         spotifyPlaylistName: playlistName,
         useSpotify: true,
       });
+
+      broadcastMusicStatus(musicStatus);
       
       res.json(musicStatus);
     } catch (error) {
@@ -227,14 +230,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             console.log("Starting playback on device:", targetDevice.id, "with playlistId:", playlistId);
             const currentTrackAfterPlay = await startPlaylistPlayback(targetDevice.id, playlistId);
-            await storage.updateMusicStatus({
+            const ensuredCurrentTrack = currentTrackAfterPlay || await getCurrentlyPlayingTrack();
+            const musicStatus = await storage.updateMusicStatus({
               isPlaying: true,
-              currentTrack: currentTrackAfterPlay?.name || null,
-              currentTrackArtist: currentTrackAfterPlay?.artist || null,
-              currentTrackAlbum: currentTrackAfterPlay?.album || null,
-              currentTrackImageUrl: currentTrackAfterPlay?.imageUrl || null,
+              currentTrack: ensuredCurrentTrack?.name || null,
+              currentTrackArtist: ensuredCurrentTrack?.artist || null,
+              currentTrackAlbum: ensuredCurrentTrack?.album || null,
+              currentTrackImageUrl: ensuredCurrentTrack?.imageUrl || null,
               spotifyConnected: true,
             });
+            broadcastMusicStatus(musicStatus);
           } catch (playError) {
             console.error("Error starting playback:", playError);
             return res.status(500).json({ error: "Failed to start playback", details: playError });
@@ -245,13 +250,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             console.log("Pausing playback on device:", targetDevice.id);
             await stopPlayback(targetDevice.id);
-            await storage.updateMusicStatus({
+            const musicStatus = await storage.updateMusicStatus({
               isPlaying: false,
               currentTrack: null,
               currentTrackArtist: null,
               currentTrackAlbum: null,
               currentTrackImageUrl: null,
             });
+            broadcastMusicStatus(musicStatus);
           } catch (pauseError) {
             console.error("Error pausing playback:", pauseError);
             return res.status(500).json({ error: "Failed to pause playback", details: pauseError });
@@ -262,8 +268,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             console.log("Skipping to next track on device:", targetDevice.id);
             await skipToNextTrack(targetDevice.id);
+            await new Promise(resolve => setTimeout(resolve, 2000));
             const currentTrackAfterNext = await getCurrentlyPlayingTrack();
-            await storage.updateMusicStatus({
+            const musicStatus = await storage.updateMusicStatus({
               isPlaying: true,
               currentTrack: currentTrackAfterNext?.name || null,
               currentTrackArtist: currentTrackAfterNext?.artist || null,
@@ -271,6 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentTrackImageUrl: currentTrackAfterNext?.imageUrl || null,
               spotifyConnected: true,
             });
+            broadcastMusicStatus(musicStatus);
           } catch (nextError) {
             console.error("Error skipping to next track:", nextError);
             return res.status(500).json({ error: "Failed to skip to next track", details: nextError });
@@ -281,8 +289,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             console.log("Skipping to previous track on device:", targetDevice.id);
             await skipToPreviousTrack(targetDevice.id);
+            await new Promise(resolve => setTimeout(resolve, 2000));
             const currentTrackAfterPrevious = await getCurrentlyPlayingTrack();
-            await storage.updateMusicStatus({
+            const musicStatus = await storage.updateMusicStatus({
               isPlaying: true,
               currentTrack: currentTrackAfterPrevious?.name || null,
               currentTrackArtist: currentTrackAfterPrevious?.artist || null,
@@ -290,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentTrackImageUrl: currentTrackAfterPrevious?.imageUrl || null,
               spotifyConnected: true,
             });
+            broadcastMusicStatus(musicStatus);
           } catch (prevError) {
             console.error("Error skipping to previous track:", prevError);
             return res.status(500).json({ error: "Failed to skip to previous track", details: prevError });
@@ -433,15 +443,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const device = await getSpotifyDevice(spotify);
                     if (device?.id) {
                       const currentTrackAfterCryingPlay = await startPlaylistPlayback(device.id, musicStatus.spotifyPlaylistId);
-                      // Add a small delay to allow Spotify API to update playback state
-                      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-                      await storage.updateMusicStatus({
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      const updatedStatus = await storage.updateMusicStatus({
                         isPlaying: true,
                         currentTrack: currentTrackAfterCryingPlay?.name || null,
                         currentTrackArtist: currentTrackAfterCryingPlay?.artist || null,
                         currentTrackAlbum: currentTrackAfterCryingPlay?.album || null,
                         currentTrackImageUrl: currentTrackAfterCryingPlay?.imageUrl || null,
                       });
+                      broadcastMusicStatus(updatedStatus);
                       cryingPlaybackActive = true;
                     }
                   } catch (error) {
@@ -461,13 +471,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const device = await getSpotifyDevice(spotify);
                     if (device?.id) {
                       await stopPlayback(device.id);
-                      await storage.updateMusicStatus({
+                      const updatedStatus = await storage.updateMusicStatus({
                         isPlaying: false,
                         currentTrack: null,
                         currentTrackArtist: null,
                         currentTrackAlbum: null,
                         currentTrackImageUrl: null,
                       });
+                      broadcastMusicStatus(updatedStatus);
                     }
                   } catch (error) {
                     console.error('Failed to stop Spotify playback:', error);
@@ -475,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
                 cryingPlaybackActive = false;
                 cryingPlaybackTimeout = null;
-              }, 100000);
+              }, 30000);
             }
           } else if (!sensorData.cryingDetected && cryingPlaybackTimeout) {
             clearTimeout(cryingPlaybackTimeout);
@@ -508,6 +519,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify(message));
       }
+    });
+  };
+
+  const broadcastMusicStatus = (status: MusicStatus | null | undefined) => {
+    if (!status) return;
+    broadcast({
+      type: 'music_update',
+      data: status,
     });
   };
 

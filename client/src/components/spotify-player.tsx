@@ -48,7 +48,11 @@ const { data: devices } = useQuery<UserDevice[]>({
   const playMutation = useMutation({
     mutationFn: () => {
       console.log("Sending play request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/player/play", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player", {
+        action: "play",
+        deviceId: selectedDeviceId,
+        playlistId: musicStatus?.spotifyPlaylistId,
+      });
     },
     onSuccess: () => {
       toast({
@@ -71,7 +75,10 @@ const { data: devices } = useQuery<UserDevice[]>({
   const pauseMutation = useMutation({
     mutationFn: () => {
       console.log("Sending pause request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/player/pause", { deviceId: selectedDeviceId });
+      return apiRequest("POST", "/api/spotify/player", {
+        action: "pause",
+        deviceId: selectedDeviceId,
+      });
     },
     onSuccess: () => {
       toast({
@@ -94,10 +101,10 @@ const { data: devices } = useQuery<UserDevice[]>({
   const nextMutation = useMutation({
     mutationFn: () => {
       console.log("Sending next request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/player/next", {
-      action: "next",
-      deviceId: selectedDeviceId,
-    });
+      return apiRequest("POST", "/api/spotify/player", {
+        action: "next",
+        deviceId: selectedDeviceId,
+      });
     },
     onSuccess: () => {
       toast({
@@ -120,10 +127,10 @@ const { data: devices } = useQuery<UserDevice[]>({
   const previousMutation = useMutation({
     mutationFn: () => {
       console.log("Sending previous request with deviceId:", selectedDeviceId);
-      return apiRequest("POST", "/api/spotify/player/previous", {
-      action: "previous",
-      deviceId: selectedDeviceId,
-    });
+      return apiRequest("POST", "/api/spotify/player", {
+        action: "previous",
+        deviceId: selectedDeviceId,
+      });
     },
     onSuccess: () => {
       toast({

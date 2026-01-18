@@ -68,6 +68,14 @@ if st.button("Send Sensor Data"):
     else:
         st.warning("Please connect to WebSocket first.")
 
+st.subheader("Manual Cry Notification")
+if st.button("Send Cry Notification"):
+    if st.session_state.ws and st.session_state.ws.connected:
+        # Force crying_detected to True while keeping current temperature and objects
+        send_sensor_data(st.session_state.ws, temperature_input, True, object_detected_input)
+    else:
+        st.warning("Please connect to WebSocket first.")
+
 st.subheader("Auto-send Random Sensor Data")
 auto_send_enabled = st.checkbox("Enable Auto-send (every 5 seconds)")
 
