@@ -86,6 +86,64 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.status(500).json({ error: "Failed to delete webcam" });
     }
   });
+
+  // Proxy RTSP stream to MJPEG
+  app.get("/api/webcams/:id/stream", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    const id = parseInt(req.params.id);
+    
+    try {
+      const webcams = await storage.getWebcams(userId);
+      const webcam = webcams.find(w => w.id === id);
+
+      if (!webcam) return res.status(404).send("Webcam not found");
+      if (webcam.type !== 'rtsp') return res.status(400).send("Not an RTSP camera");
+
+      // Set headers for MJPEG stream
+      res.writeHead(200, {
+        'Content-Type': 'multipart/x-mixed-replace; boundary=ffmpeg',
+        'Connection': 'keep-alive',
+        'Expires': 'Fri, 01 Jan 1990 00:00:00 GMT',
+        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+        'Pragma': 'no-cache'
+      });
+
+      const command = ffmpeg(webcam.url)
+        .inputOptions([
+          '-rtsp_transport', 'tcp',
+          '-re'
+        ])
+        .outputOptions([
+          '-f', 'mjpeg',
+          '-q:v', '5'
+        ])
+        .on('end', () => {
+          console.log('[RTSP Proxy] Stream ended');
+        })
+        .on('error', (err) => {
+          console.error('[RTSP Proxy] Stream error:', err.message);
+          // Don't try to send response here as headers are already sent
+        });
+
+      // Pipe to response
+      const stream = command.pipe();
+      stream.on('data', (chunk: any) => {
+        res.write(chunk);
+      });
+      
+      req.on('close', () => {
+        console.log('[RTSP Proxy] Client disconnected, killing ffmpeg');
+        command.kill('SIGKILL');
+      });
+
+    } catch (error) {
+      console.error('[RTSP Proxy] Setup error:', error);
+      if (!res.headersSent) {
+        res.sendStatus(500);
+      }
+    }
+  });
   
   // Get latest sensor data
   app.get("/api/sensors/latest", async (req, res) => {
