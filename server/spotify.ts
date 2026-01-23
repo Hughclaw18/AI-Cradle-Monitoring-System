@@ -2,8 +2,8 @@ import * as SpotifyApiModule from "@spotify/web-api-ts-sdk";
 import { URLSearchParams } from "url";
 import { storage } from "./storage";
 
-const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "69bf2fb863af44c1b890327fb1f1efec";
-const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "58c63fd24c884237a3d510cfc9bd6fc0";
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "1f7a6b45727b4d8a805a8a4fa6bee9bb";
+const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "4abd461cb39f4a999ec5831f1d247fb6";
 
 // Dynamic Redirect URI based on environment
 const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || 
