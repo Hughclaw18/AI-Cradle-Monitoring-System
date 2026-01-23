@@ -261,6 +261,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const playlists = await spotify.currentUser.playlists.playlists(50);
       res.json(playlists.items);
     } catch (error: any) {
+      console.log(`[Spotify] Error fetching playlists: ${error.message}`);
+      if (error.message === "Spotify not connected." || error.message === "Failed to refresh Spotify token") {
+        return res.status(400).json({ error: "Spotify not connected" });
+      }
       res.status(500).json({ error: "Failed to fetch playlists", message: error.message });
     }
   });
@@ -274,6 +278,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { devices } = await spotify.player.getAvailableDevices();
       res.json(devices);
     } catch (error: any) {
+      console.log(`[Spotify] Error fetching devices: ${error.message}`);
+      if (error.message === "Spotify not connected." || error.message === "Failed to refresh Spotify token") {
+        return res.status(400).json({ error: "Spotify not connected" });
+      }
       res.status(500).json({ error: "Failed to fetch devices", message: error.message });
     }
   });
