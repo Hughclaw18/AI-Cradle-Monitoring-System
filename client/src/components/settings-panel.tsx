@@ -177,8 +177,8 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               <span className="text-green-600 font-medium">Connected</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Raspberry Pi IP</span>
-              <span className="text-foreground font-mono text-sm">192.168.1.100</span>
+              <span className="text-muted-foreground">Hosted on Render at</span>
+              <span className="text-foreground font-mono text-sm">https://smartcradlemonitor.onrender.com/</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">App Version</span>

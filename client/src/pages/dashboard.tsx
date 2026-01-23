@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard, LogOut } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard, LogOut, User as UserIcon } from "lucide-react";
 import { getTimeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,16 @@ import { SystemSettings, SensorData } from "@shared/schema";
 import { format } from 'date-fns';
 import { VideoFeed } from "@/components/video-feed";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface DetectionEvent {
   type: 'crying' | 'object' | 'temperature';
@@ -261,6 +271,59 @@ export default function Dashboard() {
                 Clear All
               </Button>
             )}
+            
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <UserIcon className="h-5 w-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>User Profile</DialogTitle>
+                  <DialogDescription>
+                    View your profile details.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">
+                      Name
+                    </Label>
+                    <Input id="name" value={user?.name || ""} readOnly className="col-span-3" />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="username" className="text-right">
+                      Username
+                    </Label>
+                    <Input id="username" value={user?.username || ""} readOnly className="col-span-3" />
+                  </div>
+                   <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">
+                      Email
+                    </Label>
+                    <Input id="email" value={user?.email || ""} readOnly className="col-span-3" />
+                  </div>
+                   <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="phone" className="text-right">
+                      Phone
+                    </Label>
+                    <Input id="phone" value={user?.phone || ""} readOnly className="col-span-3" />
+                  </div>
+                   <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="address" className="text-right">
+                      Address
+                    </Label>
+                    <Input id="address" value={user?.address || ""} readOnly className="col-span-3" />
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <Button
               variant="ghost"
               size="icon"
