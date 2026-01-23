@@ -4,8 +4,8 @@ import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 import { setupVite, serveStatic, log } from "./vite";
 import { createServer } from "http";
-import { WebSocketServer } from "ws";
 import cors from "cors";
+// import { WebSocketServer } from "ws";
 
 const app = express();
 app.use(cors({
@@ -68,24 +68,13 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  // un-comment below port while running locally
+  // serve the app on port 5000 in development, or process.env.PORT in production
   const port = Number(process.env.PORT) || 3000;
   httpServer.listen({
     port,
     host: "0.0.0.0",
   }, () => {
     log(`serving on port ${port}`);
-
-  // // below is for render deployment
-  //  const PORT = process.env.PORT || 3000;
-  // server.listen({
-  //   port: Number(PORT),
-  //   host: "0.0.0.0",
-  // }, () => {
-    // log(`Server running on port ${PORT}`);
   }).on('error', (err: Error) => {
     console.error('Server failed to start:', err.message);
     process.exit(1);
