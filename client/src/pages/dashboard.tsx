@@ -339,7 +339,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-4 h-auto p-2">
             <TabsTrigger value="dashboard" className="flex flex-col items-center p-2">
               <LayoutDashboard className="h-4 w-4 mb-1" />
               <span className="text-xs">Dashboard</span>
