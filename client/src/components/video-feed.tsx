@@ -86,17 +86,18 @@ export function VideoFeed() {
              selectedWebcam.type === 'mjpeg' ? (
                 <img src={selectedWebcam.url} alt={selectedWebcam.name} className="w-full h-full object-cover" />
              ) : selectedWebcam.type === 'rtsp' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-6 text-center bg-gray-900">
-                  <VideoOff className="h-12 w-12 opacity-50 mb-4" />
-                  <h3 className="font-semibold mb-2">RTSP Stream Detected</h3>
-                  <p className="text-sm text-gray-400 mb-4">
-                    Browsers cannot play raw RTSP streams ({selectedWebcam.url}) directly.
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Please use a WebRTC viewer URL if your camera supports it, or configure an RTSP-to-WebRTC proxy.
-                  </p>
-                </div>
-             ) : (
+                <img 
+                  src={`/api/webcams/${selectedWebcam.id}/stream`} 
+                  alt={selectedWebcam.name} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null; // Prevent infinite loop
+                    // Could show an error placeholder here if needed
+                    console.error("Failed to load RTSP stream");
+                  }}
+                />
+              ) : (
                 <iframe src={selectedWebcam.url} className="w-full h-full border-0" allowFullScreen />
              )
           ) : (

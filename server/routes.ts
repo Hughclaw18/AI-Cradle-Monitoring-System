@@ -8,6 +8,12 @@ import { getSpotifyDevice, getUncachableSpotifyClient, isSpotifyConnected, getSp
 import type { SpotifyApi, Device } from "@spotify/web-api-ts-sdk";
 import { sessionMiddleware } from "./auth";
 import passport from "passport";
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from 'ffmpeg-static';
+
+if (ffmpegPath) {
+  ffmpeg.setFfmpegPath(ffmpegPath);
+}
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
   // --- WebSocket Server Setup with Auth ---
