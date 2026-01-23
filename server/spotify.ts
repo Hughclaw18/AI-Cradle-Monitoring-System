@@ -4,8 +4,8 @@ import { storage } from "./storage";
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "69bf2fb863af44c1b890327fb1f1efec";
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "58c63fd24c884237a3d510cfc9bd6fc0";
-const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
-// const REDIRECT_URI = "https://smartcradlemonitor.onrender.com/api/spotify/callback";
+// const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
+const REDIRECT_URI = "https://smartcradlemonitor.onrender.com/api/spotify/callback";
 
 export function getSpotifyAuthUrl() {
   const scope = "user-read-private user-read-email playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state user-read-currently-playing";
