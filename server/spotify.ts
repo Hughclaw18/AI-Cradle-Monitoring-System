@@ -12,6 +12,7 @@ const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI ||
     : "http://127.0.0.1:3000/api/spotify/callback");
 
 export function getSpotifyAuthUrl() {
+  console.log(`[Spotify] Generating Auth URL with Redirect URI: ${REDIRECT_URI}`);
   const scope = "user-read-private user-read-email playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state user-read-currently-playing";
   const params = new URLSearchParams({
     response_type: "code",
