@@ -450,6 +450,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       const settings = insertSystemSettingsSchema.partial().parse(req.body);
       const updatedSettings = await storage.updateSystemSettings(userId, settings);
+      
+      broadcast(userId, {
+        type: 'settings_update',
+        data: updatedSettings
+      });
+
       res.json(updatedSettings);
     } catch (error) {
       if (error instanceof z.ZodError) {

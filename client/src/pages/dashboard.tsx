@@ -148,6 +148,15 @@ export default function Dashboard() {
     });
   }, [notifications, permission, showAlert]);
 
+  // Toggle dark mode based on nightMode setting
+  useEffect(() => {
+    if (settings?.nightMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [settings?.nightMode]);
+
   // Handler functions
   const handlePlayPause = () => {
     updateMusicMutation.mutate({
@@ -213,9 +222,9 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="max-w-sm mx-auto bg-white min-h-screen shadow-lg relative">
+    <div className="max-w-sm mx-auto bg-background min-h-screen shadow-lg relative">
       {/* Status Bar */}
-      <div className="bg-indigo-500 text-white px-4 py-2 flex justify-between items-center text-sm">
+      <div className="bg-primary text-primary-foreground px-4 py-2 flex justify-between items-center text-sm">
         <span>{new Date().toLocaleTimeString('en-US', { 
           hour: 'numeric', 
           minute: '2-digit' 
@@ -227,15 +236,15 @@ export default function Dashboard() {
       </div>
 
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-background shadow-sm border-b border-border">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Baby className="h-6 w-6 text-indigo-500" />
-            <h1 className="text-xl font-semibold text-gray-800">Smart Cradle</h1>
+            <Baby className="h-6 w-6 text-primary" />
+            <h1 className="text-xl font-semibold text-foreground">Smart Cradle</h1>
           </div>
           <div className="flex items-center space-x-3">
             <div className="relative">
-              <Bell className="h-5 w-5 text-gray-600" />
+              <Bell className="h-5 w-5 text-muted-foreground" />
               {notifications.length > 0 && (
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                   {notifications.length}
@@ -247,11 +256,19 @@ export default function Dashboard() {
                 variant="ghost"
                 size="sm"
                 onClick={clearAllNotifications}
-                className="text-gray-600 hover:text-gray-800"
+                className="text-muted-foreground hover:text-foreground"
               >
                 Clear All
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logoutMutation.mutate()}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </header>
@@ -286,7 +303,7 @@ export default function Dashboard() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-semibold text-gray-800">System Status</h2>
+                  <h2 className="text-lg font-semibold text-foreground">System Status</h2>
                   <Button variant="outline" size="sm" className="text-sm">
                     View Details
                   </Button>
@@ -330,7 +347,7 @@ export default function Dashboard() {
             {/* Quick Actions */}
             <Card>
               <CardContent className="p-4">
-                <h3 className="font-medium text-gray-800 mb-3">Quick Actions</h3>
+                <h3 className="font-medium text-foreground mb-3">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     variant="destructive"
@@ -360,21 +377,21 @@ export default function Dashboard() {
           <TabsContent value="history" className="space-y-4 mt-4">
             <Card>
               <CardContent className="p-4">
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">Detection History</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">Detection History</h2>
 
                 {/* Object Detections */}
-                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                <div className="border rounded-lg shadow-sm bg-card mb-4">
                   <div
                     className="flex justify-between items-center p-3 cursor-pointer"
                     onClick={() => setIsObjectExpanded(!isObjectExpanded)}
                   >
-                    <h3 className="font-medium text-gray-700">Object Detections</h3>
+                    <h3 className="font-medium text-foreground">Object Detections</h3>
                     <ChevronDown className={`h-4 w-4 transition-transform ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
                   {isObjectExpanded && (
                     <div className="p-3 pt-0 border-t space-y-2">
                       {detections?.filter(d => d.type === 'object').length === 0 ? (
-                        <p className="text-gray-500">No object detections.</p>
+                        <p className="text-muted-foreground">No object detections.</p>
                       ) : (
                         detections?.filter(d => d.type === 'object').map((entry, index) => (
                           <div key={index} className="p-2 border rounded">
@@ -388,18 +405,18 @@ export default function Dashboard() {
                 </div>
 
                 {/* Crying Detections */}
-                <div className="border rounded-lg shadow-sm bg-white mb-4">
+                <div className="border rounded-lg shadow-sm bg-card mb-4">
                   <div
                     className="flex justify-between items-center p-3 cursor-pointer"
                     onClick={() => setIsCryingExpanded(!isCryingExpanded)}
                   >
-                    <h3 className="font-medium text-gray-700">Crying Detections</h3>
+                    <h3 className="font-medium text-foreground">Crying Detections</h3>
                     <ChevronDown className={`h-4 w-4 transition-transform ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
                   {isCryingExpanded && (
                     <div className="p-3 pt-0 border-t space-y-2">
                       {detections?.filter(d => d.type === 'crying').length === 0 ? (
-                        <p className="text-gray-500">No crying detections.</p>
+                        <p className="text-muted-foreground">No crying detections.</p>
                       ) : (
                         detections?.filter(d => d.type === 'crying').map((entry, index) => (
                           <div key={index} className="p-2 border rounded">
@@ -413,18 +430,18 @@ export default function Dashboard() {
                 </div>
 
                 {/* Temperature Detections */}
-                <div className="border rounded-lg shadow-sm bg-white">
+                <div className="border rounded-lg shadow-sm bg-card">
                   <div
                     className="flex justify-between items-center p-3 cursor-pointer"
                     onClick={() => setIsTemperatureExpanded(!isTemperatureExpanded)}
                   >
-                    <h3 className="font-medium text-gray-700">Temperature Alerts</h3>
+                    <h3 className="font-medium text-foreground">Temperature Alerts</h3>
                     <ChevronDown className={`h-4 w-4 transition-transform ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
                   {isTemperatureExpanded && (
                     <div className="p-3 pt-0 border-t space-y-2">
                       {detections?.filter(d => d.type === 'temperature').length === 0 ? (
-                        <p className="text-gray-500">No temperature alerts.</p>
+                        <p className="text-muted-foreground">No temperature alerts.</p>
                       ) : (
                         detections?.filter(d => d.type === 'temperature').map((entry, index) => (
                           <div key={index} className="p-2 border rounded">
@@ -454,9 +471,9 @@ export default function Dashboard() {
       <div className="fixed bottom-6 right-6">
         <Button
           onClick={handleEmergencyStop}
-          className="w-14 h-14 bg-indigo-500 hover:bg-indigo-600 rounded-full shadow-lg flex items-center justify-center"
+          className="w-14 h-14 bg-primary hover:bg-primary/90 rounded-full shadow-lg flex items-center justify-center"
         >
-          <Baby className="h-6 w-6 text-white" />
+          <Baby className="h-6 w-6 text-primary-foreground" />
         </Button>
       </div>
 
@@ -484,20 +501,20 @@ const DetectionLogItem: React.FC<DetectionLogItemProps> = ({ entry }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="border rounded-lg shadow-sm bg-white">
+    <div className="border rounded-lg shadow-sm bg-card">
       <div
         className="flex justify-between items-center p-3 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <p className="text-sm font-medium">
           {entry.type === 'temperature' ? 'Temperature Alert' : `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} Detection`}
-          <span className="ml-2 text-gray-500">{format(new Date(entry.timestamp), 'PPP p')}</span>
+          <span className="ml-2 text-muted-foreground">{format(new Date(entry.timestamp), 'PPP p')}</span>
         </p>
         <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
       </div>
       {isExpanded && (
         <div className="p-3 pt-0 border-t">
-          <p className="text-sm text-gray-600">Details: {entry.details}</p>
+          <p className="text-sm text-muted-foreground">Details: {entry.details}</p>
         </div>
       )}
     </div>

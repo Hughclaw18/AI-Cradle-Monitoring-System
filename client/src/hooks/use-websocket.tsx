@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { SensorData, ServoStatus, MusicStatus, SystemSettings } from "@shared/schema";
 
 export interface WebSocketMessage {
-  type: 'initial_data' | 'sensor_update' | 'servo_update' | 'music_update' | 'notification';
+  type: 'initial_data' | 'sensor_update' | 'servo_update' | 'music_update' | 'notification' | 'settings_update';
   data: any;
 }
 
@@ -64,6 +64,10 @@ export function useWebSocket() {
               
             case 'music_update':
               setMusicStatus(message.data as MusicStatus);
+              break;
+
+            case 'settings_update':
+              setSettings(message.data as SystemSettings);
               break;
               
             case 'notification':

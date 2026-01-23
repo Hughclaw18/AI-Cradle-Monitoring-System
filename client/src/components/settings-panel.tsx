@@ -34,13 +34,13 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
       {/* Sensor Settings */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="font-medium text-gray-800 mb-4">Sensor Settings</h3>
+          <h3 className="font-medium text-foreground mb-4">Sensor Settings</h3>
           
           {/* Temperature Threshold */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="font-medium text-gray-700">Temperature Alert</label>
-              <span className="text-sm text-gray-500">{settings.tempThreshold}°F</span>
+              <label className="font-medium text-foreground">Temperature Alert</label>
+              <span className="text-sm text-muted-foreground">{settings.tempThreshold}°F</span>
             </div>
             <Slider
               value={[settings.tempThreshold]}
@@ -50,7 +50,7 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               step={1}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
               <span>70°F</span>
               <span>85°F</span>
             </div>
@@ -59,8 +59,8 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
           {/* Object Sensitivity */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="font-medium text-gray-700">Object Sensitivity</label>
-              <span className="text-sm text-gray-500">
+              <label className="font-medium text-foreground">Object Sensitivity</label>
+              <span className="text-sm text-muted-foreground">
                 {getSensitivityLabel(settings.motionSensitivity)}
               </span>
             </div>
@@ -72,17 +72,17 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               step={1}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
               <span>Low</span>
               <span>High</span>
             </div>
           </div>
 
           {/* Crying Detection Toggle */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div>
-              <div className="font-medium text-gray-800">Crying Detection</div>
-              <div className="text-sm text-gray-500">Enable audio analysis</div>
+              <div className="font-medium text-foreground">Crying Detection</div>
+              <div className="text-sm text-muted-foreground">Enable audio analysis</div>
             </div>
             <Switch
               checked={settings.cryingDetectionEnabled}
@@ -95,13 +95,13 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
       {/* Automation Settings */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="font-medium text-gray-800 mb-4">Automation</h3>
+          <h3 className="font-medium text-foreground mb-4">Automation</h3>
           <div className="space-y-3">
             
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Auto Response</div>
-                <div className="text-sm text-gray-500">Respond to crying automatically</div>
+                <div className="font-medium text-foreground">Auto Response</div>
+                <div className="text-sm text-muted-foreground">Respond to crying automatically</div>
               </div>
               <Switch
                 checked={settings.autoResponse}
@@ -109,10 +109,10 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Night Mode</div>
-                <div className="text-sm text-gray-500">Reduced sensitivity 10 PM - 6 AM</div>
+                <div className="font-medium text-foreground">Night Mode</div>
+                <div className="text-sm text-muted-foreground">Reduced sensitivity 10 PM - 6 AM</div>
               </div>
               <Switch
                 checked={settings.nightMode}
@@ -127,13 +127,13 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
       {/* Notification Settings */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="font-medium text-gray-800 mb-4">Notifications</h3>
+          <h3 className="font-medium text-foreground mb-4">Notifications</h3>
           <div className="space-y-3">
             
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Push Notifications</div>
-                <div className="text-sm text-gray-500">Receive alerts on your device</div>
+                <div className="font-medium text-foreground">Push Notifications</div>
+                <div className="text-sm text-muted-foreground">Receive alerts on your device</div>
               </div>
               <Switch
                 checked={settings.pushNotifications}
@@ -141,10 +141,10 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Temperature Alerts</div>
-                <div className="text-sm text-gray-500">Alert when temperature exceeds threshold</div>
+                <div className="font-medium text-foreground">Temperature Alerts</div>
+                <div className="text-sm text-muted-foreground">Alert when temperature exceeds threshold</div>
               </div>
               <Switch
                 checked={settings.tempAlerts}
@@ -152,10 +152,10 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
               />
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <div className="font-medium text-gray-800">Object Alerts</div>
-                <div className="text-sm text-gray-500">Alert when object is detected</div>
+                <div className="font-medium text-foreground">Object Alerts</div>
+                <div className="text-sm text-muted-foreground">Alert when object is detected</div>
               </div>
               <Switch
                 checked={settings.motionAlerts}
@@ -170,27 +170,27 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
       {/* System Info */}
       <Card>
         <CardContent className="p-4">
-          <h3 className="font-medium text-gray-800 mb-4">System Information</h3>
+          <h3 className="font-medium text-foreground mb-4">System Information</h3>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">Device Status</span>
+              <span className="text-muted-foreground">Device Status</span>
               <span className="text-green-600 font-medium">Connected</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">Raspberry Pi IP</span>
-              <span className="text-gray-800 font-mono text-sm">192.168.1.100</span>
+              <span className="text-muted-foreground">Raspberry Pi IP</span>
+              <span className="text-foreground font-mono text-sm">192.168.1.100</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">App Version</span>
-              <span className="text-gray-800">v1.0.0</span>
+              <span className="text-muted-foreground">App Version</span>
+              <span className="text-foreground">v1.0.0</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">Last Sync</span>
-              <span className="text-gray-800">Just now</span>
+              <span className="text-muted-foreground">Last Sync</span>
+              <span className="text-foreground">Just now</span>
             </div>
           </div>
           
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-border">
             <Button
               onClick={onReconnect}
               className="w-full flex items-center justify-center space-x-2"
