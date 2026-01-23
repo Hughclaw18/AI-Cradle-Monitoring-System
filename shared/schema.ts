@@ -92,6 +92,7 @@ export const systemSettings = pgTable("system_settings", {
   pushNotifications: boolean("push_notifications").notNull().default(true),
   tempAlerts: boolean("temp_alerts").notNull().default(true),
   motionAlerts: boolean("motion_alerts").notNull().default(false),
+  enableLocalWebcam: boolean("enable_local_webcam").notNull().default(false),
 });
 
 export const tracks = pgTable("tracks", {

@@ -63,6 +63,7 @@ export default function Dashboard() {
     nightMode: false,
     pushNotifications: true,
     tempAlerts: true,
+    enableLocalWebcam: false,
     motionAlerts: false,
   };
   const [detections, setDetections] = useState<DetectionEvent[]>([]);
@@ -437,87 +438,83 @@ export default function Dashboard() {
             <SpotifyConnect />
           </TabsContent>
 
-          <TabsContent value="history" className="space-y-4 mt-4">
-            <Card>
-              <CardContent className="p-4">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Detection History</h2>
-
-                {/* Object Detections */}
-                <div className="border rounded-lg shadow-sm bg-card mb-4">
-                  <div
-                    className="flex justify-between items-center p-3 cursor-pointer"
+          <TabsContent value="history" className="mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Object Detections */}
+              <Card className="h-fit">
+                <CardContent className="p-4">
+                  <div 
+                    className="flex justify-between items-center mb-4 cursor-pointer md:cursor-default"
                     onClick={() => setIsObjectExpanded(!isObjectExpanded)}
                   >
-                    <h3 className="font-medium text-foreground">Object Detections</h3>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-semibold text-foreground">Object Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform md:hidden ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
-                  {isObjectExpanded && (
-                    <div className="p-3 pt-0 border-t space-y-2">
-                      {detections?.filter(d => d.type === 'object').length === 0 ? (
-                        <p className="text-muted-foreground">No object detections.</p>
-                      ) : (
-                        detections?.filter(d => d.type === 'object').map((entry, index) => (
-                          <div key={index} className="p-2 border rounded">
-                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
-                            <p className="text-sm">Details: {entry.details}</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                  <div className={`${isObjectExpanded ? 'block' : 'hidden'} md:block space-y-2`}>
+                    {detections?.filter(d => d.type === 'object').length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No object detections.</p>
+                    ) : (
+                      detections?.filter(d => d.type === 'object').slice(0, 10).map((entry, index) => (
+                        <div key={index} className="p-2 border rounded bg-muted/50">
+                          <p className="text-xs text-muted-foreground">{format(new Date(entry.timestamp), 'PPP p')}</p>
+                          <p className="text-sm mt-1">{entry.details}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-                {/* Crying Detections */}
-                <div className="border rounded-lg shadow-sm bg-card mb-4">
-                  <div
-                    className="flex justify-between items-center p-3 cursor-pointer"
+              {/* Crying Detections */}
+              <Card className="h-fit">
+                <CardContent className="p-4">
+                  <div 
+                    className="flex justify-between items-center mb-4 cursor-pointer md:cursor-default"
                     onClick={() => setIsCryingExpanded(!isCryingExpanded)}
                   >
-                    <h3 className="font-medium text-foreground">Crying Detections</h3>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-semibold text-foreground">Crying Detections</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform md:hidden ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
-                  {isCryingExpanded && (
-                    <div className="p-3 pt-0 border-t space-y-2">
-                      {detections?.filter(d => d.type === 'crying').length === 0 ? (
-                        <p className="text-muted-foreground">No crying detections.</p>
-                      ) : (
-                        detections?.filter(d => d.type === 'crying').map((entry, index) => (
-                          <div key={index} className="p-2 border rounded">
-                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
-                            <p className="text-sm">Details: {entry.details}</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                  <div className={`${isCryingExpanded ? 'block' : 'hidden'} md:block space-y-2`}>
+                    {detections?.filter(d => d.type === 'crying').length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No crying detections.</p>
+                    ) : (
+                      detections?.filter(d => d.type === 'crying').slice(0, 10).map((entry, index) => (
+                        <div key={index} className="p-2 border rounded bg-muted/50">
+                          <p className="text-xs text-muted-foreground">{format(new Date(entry.timestamp), 'PPP p')}</p>
+                          <p className="text-sm mt-1">{entry.details}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-                {/* Temperature Detections */}
-                <div className="border rounded-lg shadow-sm bg-card">
-                  <div
-                    className="flex justify-between items-center p-3 cursor-pointer"
+              {/* Temperature Alerts */}
+              <Card className="h-fit">
+                <CardContent className="p-4">
+                  <div 
+                    className="flex justify-between items-center mb-4 cursor-pointer md:cursor-default"
                     onClick={() => setIsTemperatureExpanded(!isTemperatureExpanded)}
                   >
-                    <h3 className="font-medium text-foreground">Temperature Alerts</h3>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-semibold text-foreground">Temperature Alerts</h3>
+                    <ChevronDown className={`h-4 w-4 transition-transform md:hidden ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
                   </div>
-                  {isTemperatureExpanded && (
-                    <div className="p-3 pt-0 border-t space-y-2">
-                      {detections?.filter(d => d.type === 'temperature').length === 0 ? (
-                        <p className="text-muted-foreground">No temperature alerts.</p>
-                      ) : (
-                        detections?.filter(d => d.type === 'temperature').map((entry, index) => (
-                          <div key={index} className="p-2 border rounded">
-                            <p className="text-sm">Time: {format(new Date(entry.timestamp), 'PPP p')}</p>
-                            <p className="text-sm">Details: {entry.details}</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  <div className={`${isTemperatureExpanded ? 'block' : 'hidden'} md:block space-y-2`}>
+                    {detections?.filter(d => d.type === 'temperature').length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No temperature alerts.</p>
+                    ) : (
+                      detections?.filter(d => d.type === 'temperature').slice(0, 10).map((entry, index) => (
+                        <div key={index} className="p-2 border rounded bg-muted/50">
+                          <p className="text-xs text-muted-foreground">{format(new Date(entry.timestamp), 'PPP p')}</p>
+                          <p className="text-sm mt-1">{entry.details}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4 mt-4">

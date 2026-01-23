@@ -31,6 +31,23 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
       <div className="space-y-4">
         {/* Camera Management */}
         <WebcamManager />
+        
+        {/* Local Camera Settings */}
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-medium text-foreground mb-4">Camera Settings</h3>
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div>
+                <div className="font-medium text-foreground">Enable Local Camera</div>
+                <div className="text-sm text-muted-foreground">Allow use of device webcam</div>
+              </div>
+              <Switch
+                checked={settings.enableLocalWebcam}
+                onCheckedChange={(enabled) => onUpdateSettings({ enableLocalWebcam: enabled })}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Sensor Settings */}
         <Card>
