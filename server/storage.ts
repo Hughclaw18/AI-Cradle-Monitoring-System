@@ -32,6 +32,7 @@ export interface IStorage {
   getSpotifyConfig(userId: number): Promise<SpotifyConfig | undefined>;
   createSpotifyConfig(config: InsertSpotifyConfig): Promise<SpotifyConfig>;
   updateSpotifyConfig(userId: number, config: Partial<InsertSpotifyConfig>): Promise<SpotifyConfig>;
+  deleteSpotifyConfig(userId: number): Promise<void>;
 
   // Sensor data
   insertSensorData(data: InsertSensorData): Promise<SensorData>;
@@ -101,22 +102,41 @@ export class DatabaseStorage implements IStorage {
 
   // Spotify Config
   async getSpotifyConfig(userId: number): Promise<SpotifyConfig | undefined> {
-    const [config] = await db.select().from(spotifyConfig).where(eq(spotifyConfig.userId, userId));
+    const [config] = await db.select().from(spotifyConfig).where(eq(spotifyConfig.userId, userId)).orderBy(desc(spotifyConfig.id)).limit(1);
     return config;
   }
 
   async createSpotifyConfig(config: InsertSpotifyConfig): Promise<SpotifyConfig> {
+    const existing = await this.getSpotifyConfig(config.userId);
+    if (existing) {
+      return this.updateSpotifyConfig(config.userId, config);
+    }
     const [newConfig] = await db.insert(spotifyConfig).values(config).returning();
     return newConfig;
   }
 
   async updateSpotifyConfig(userId: number, config: Partial<InsertSpotifyConfig>): Promise<SpotifyConfig> {
+    // Update the most recent config for this user
+    // Since we don't have unique constraint, we should target the specific ID if possible, 
+    // but getSpotifyConfig returns the latest, so let's get that ID first.
+    
+    const existing = await this.getSpotifyConfig(userId);
+    if (!existing) {
+        throw new Error("No Spotify config found to update");
+    }
+
     const [updated] = await db
       .update(spotifyConfig)
       .set(config)
-      .where(eq(spotifyConfig.userId, userId))
+      .where(eq(spotifyConfig.id, existing.id))
       .returning();
     return updated;
+  }
+
+  async deleteSpotifyConfig(userId: number): Promise<void> {
+    console.log(`[Storage] Deleting Spotify config for user ${userId}`);
+    await db.delete(spotifyConfig).where(eq(spotifyConfig.userId, userId));
+    console.log(`[Storage] Deleted Spotify config for user ${userId}`);
   }
 
   // Sensor Data
