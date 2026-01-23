@@ -45,7 +45,39 @@ app.use((req, res, next) => {
   next();
 });
 
+import { db } from "./db";
+import { sql } from "drizzle-orm";
+
 (async () => {
+  // --- Create Trigger for Session User UUID ---
+  try {
+    await db.execute(sql`
+      CREATE OR REPLACE FUNCTION sync_session_user_data() RETURNS TRIGGER AS $$
+      BEGIN
+        -- Extract user ID from sess JSON (passport.user)
+        -- Assuming passport stores user ID as integer in sess->'passport'->>'user'
+        IF NEW.sess->'passport'->>'user' IS NOT NULL THEN
+            NEW.user_id := (NEW.sess->'passport'->>'user')::integer;
+            
+            -- Fetch UUID from users table
+            SELECT uuid INTO NEW.user_uuid FROM users WHERE id = NEW.user_id;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+      
+      DROP TRIGGER IF EXISTS trigger_sync_session_user_data ON session;
+      
+      CREATE TRIGGER trigger_sync_session_user_data
+      BEFORE INSERT OR UPDATE ON session
+      FOR EACH ROW
+      EXECUTE FUNCTION sync_session_user_data();
+    `);
+    console.log("Session sync trigger created successfully.");
+  } catch (error) {
+    console.error("Failed to create session sync trigger:", error);
+  }
+
   const httpServer = createServer(app);
   setupAuth(app);
 

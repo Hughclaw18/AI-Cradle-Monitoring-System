@@ -1,9 +1,11 @@
 import { pgTable, text, serial, integer, boolean, real, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  uuid: text("uuid").notNull().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -17,6 +19,8 @@ export const sessions = pgTable("session", {
   sid: text("sid").primaryKey(),
   sess: json("sess").notNull(),
   expire: timestamp("expire", { precision: 6 }).notNull(),
+  userId: integer("user_id"), // Added for mapping session to user
+  userUuid: text("user_uuid"), // Added for mapping session to user UUID
 });
 
 export const webcams = pgTable("webcams", {
