@@ -1,9 +1,46 @@
-import { pgTable, text, serial, integer, boolean, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, real, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  address: text("address"),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sessions = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
+
+export const webcams = pgTable("webcams", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  type: text("type").notNull().default("webrtc"), // webrtc, mjpeg, hls
+  location: text("location"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const spotifyConfig = pgTable("spotify_config", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  expiresAt: integer("expires_at"), // Unix timestamp in seconds
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const sensorData = pgTable("sensor_data", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
   temperature: real("temperature").notNull(),
   objectDetected: text("object_detected").$type<{
@@ -14,11 +51,9 @@ export const sensorData = pgTable("sensor_data", {
   cryingDetected: boolean("crying_detected").notNull().default(false),
 });
 
-export type SensorData = typeof sensorData.$inferSelect;
-export type InsertSensorData = typeof sensorData.$inferInsert;
-
 export const servoStatus = pgTable("servo_status", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
   position: integer("position").notNull().default(0), // 0-180 degrees
   isMoving: boolean("is_moving").notNull().default(false),
   autoRock: boolean("auto_rock").notNull().default(false),
@@ -27,6 +62,7 @@ export const servoStatus = pgTable("servo_status", {
 
 export const musicStatus = pgTable("music_status", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
   currentTrack: text("current_track"),
   currentTrackArtist: text("current_track_artist"),
   currentTrackAlbum: text("current_track_album"),
@@ -43,6 +79,7 @@ export const musicStatus = pgTable("music_status", {
 
 export const systemSettings = pgTable("system_settings", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
   tempThreshold: real("temp_threshold").notNull().default(78),
   motionSensitivity: integer("motion_sensitivity").notNull().default(3), // 1-5
   cryingDetectionEnabled: boolean("crying_detection_enabled").notNull().default(true),
@@ -55,6 +92,7 @@ export const systemSettings = pgTable("system_settings", {
 
 export const tracks = pgTable("tracks", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
   name: text("name").notNull(),
   filename: text("filename").notNull(),
   duration: integer("duration").notNull(), // in seconds
@@ -62,6 +100,21 @@ export const tracks = pgTable("tracks", {
 });
 
 // Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWebcamSchema = createInsertSchema(webcams).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSpotifyConfigSchema = createInsertSchema(spotifyConfig).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertSensorDataSchema = createInsertSchema(sensorData).omit({
   id: true,
   timestamp: true,
@@ -86,7 +139,17 @@ export const insertTrackSchema = createInsertSchema(tracks).omit({
 });
 
 // Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
+export type Webcam = typeof webcams.$inferSelect;
+export type InsertWebcam = z.infer<typeof insertWebcamSchema>;
+
+export type SpotifyConfig = typeof spotifyConfig.$inferSelect;
+export type InsertSpotifyConfig = z.infer<typeof insertSpotifyConfigSchema>;
+
+export type SensorData = typeof sensorData.$inferSelect;
+export type InsertSensorData = typeof sensorData.$inferInsert;
 
 export type ServoStatus = typeof servoStatus.$inferSelect;
 export type InsertServoStatus = z.infer<typeof insertServoStatusSchema>;

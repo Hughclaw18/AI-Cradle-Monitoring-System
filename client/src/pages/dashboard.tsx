@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard, LogOut } from "lucide-react";
 import { getTimeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +18,8 @@ import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { SystemSettings, SensorData } from "@shared/schema";
 import { format } from 'date-fns';
+import { VideoFeed } from "@/components/video-feed";
+import { useAuth } from "@/hooks/use-auth";
 
 interface DetectionEvent {
   type: 'crying' | 'object' | 'temperature';
@@ -26,6 +28,7 @@ interface DetectionEvent {
 }
 
 export default function Dashboard() {
+  const { user, logoutMutation } = useAuth();
   const {
     connected,
     sensorData,
@@ -39,6 +42,19 @@ export default function Dashboard() {
 
   const { permission, requestPermission, showAlert } = useNotifications();
   const [activeTab, setActiveTab] = useState("dashboard");
+
+  const defaultSettings: SystemSettings = {
+    id: 0,
+    userId: user?.id || 0,
+    tempThreshold: 78,
+    motionSensitivity: 3,
+    cryingDetectionEnabled: true,
+    autoResponse: true,
+    nightMode: false,
+    pushNotifications: true,
+    tempAlerts: true,
+    motionAlerts: false,
+  };
   const [detections, setDetections] = useState<DetectionEvent[]>([]);
   const [isObjectExpanded, setIsObjectExpanded] = useState(false);
   const [isCryingExpanded, setIsCryingExpanded] = useState(false);
@@ -215,7 +231,7 @@ export default function Dashboard() {
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Baby className="h-6 w-6 text-indigo-500" />
-            <h1 className="text-xl font-semibold text-gray-800">Baby Monitor</h1>
+            <h1 className="text-xl font-semibold text-gray-800">Smart Cradle</h1>
           </div>
           <div className="flex items-center space-x-3">
             <div className="relative">
@@ -263,6 +279,9 @@ export default function Dashboard() {
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-4 mt-4">
+            {/* Live Video Feed */}
+            <VideoFeed/>
+
             {/* System Status */}
             <Card>
               <CardContent className="p-4">
@@ -422,13 +441,11 @@ export default function Dashboard() {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4 mt-4">
-            {settings && (
-              <SettingsPanel
-                settings={settings}
-                onUpdateSettings={handleUpdateSettings}
-                onReconnect={handleReconnect}
-              />
-            )}
+            <SettingsPanel
+              settings={settings || defaultSettings}
+              onUpdateSettings={handleUpdateSettings}
+              onReconnect={handleReconnect}
+            />
           </TabsContent>
         </Tabs>
       </div>

@@ -5,17 +5,54 @@ from PIL import Image # Import Image for displaying PIL objects
 import websocket
 import json
 import time
+import requests
 from utils.model_loader import load_cry_detection_model, load_object_detection_model, load_posture_detection_model
 from utils.inference import predict_cry, predict_object, process_video_for_detection, predict_posture
 
 # Set page config
 st.set_page_config(page_title="Baby Posture Detection", layout="wide")
 
-# Define the WebSocket server URL
+# Define the WebSocket server URL and API URL
 WEBSOCKET_URL = "ws://127.0.0.1:3000/ws"
+API_URL = "http://127.0.0.1:3000/api"
+
+# Initialize session state for auth
+if 'cookies' not in st.session_state:
+    st.session_state.cookies = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
 
 # Title
 st.title("👶 Baby Posture and Object Detection")
+
+# Authentication Sidebar
+with st.sidebar:
+    st.header("Authentication")
+    if not st.session_state.cookies:
+        st.subheader("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            try:
+                response = requests.post(f"{API_URL}/login", json={"username": username, "password": password})
+                if response.status_code == 200:
+                    st.session_state.cookies = response.cookies
+                    st.session_state.username = username
+                    st.success(f"Logged in as {username}")
+                    st.rerun()
+                else:
+                    st.error("Login failed. Please check credentials.")
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+    else:
+        st.write(f"Logged in as **{st.session_state.username}**")
+        if st.button("Logout"):
+            st.session_state.cookies = None
+            st.session_state.username = None
+            if st.session_state.ws:
+                st.session_state.ws.close()
+                st.session_state.ws = None
+            st.rerun()
 
 # Pre-load models into cache (messages removed as per user request)
 _ = load_posture_detection_model("simulator/models/best.pt")
@@ -65,11 +102,16 @@ with col_ws1:
         if st.session_state.ws and st.session_state.ws.connected:
             st.warning("Already connected to WebSocket.")
         else:
-            try:
-                st.session_state.ws = websocket.create_connection(WEBSOCKET_URL)
-                st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
-            except Exception as e:
-                st.error(f"Failed to connect to WebSocket: {e}")
+            if not st.session_state.cookies:
+                st.error("Please login first to connect to the server.")
+            else:
+                try:
+                    # Construct cookie string for WebSocket
+                    cookie_string = "; ".join([f"{k}={v}" for k, v in st.session_state.cookies.get_dict().items()])
+                    st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, cookie=cookie_string)
+                    st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
+                except Exception as e:
+                    st.error(f"Failed to connect to WebSocket: {e}")
 
 with col_ws2:
     if st.button("Disconnect from WebSocket", key="disconnect_ws"):

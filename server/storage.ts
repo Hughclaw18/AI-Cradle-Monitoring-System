@@ -1,260 +1,228 @@
 import { 
-  SensorData, 
-  ServoStatus, 
-  MusicStatus, 
-  SystemSettings, 
-  Track,
-  InsertSensorData, 
-  InsertServoStatus, 
-  InsertMusicStatus, 
-  InsertSystemSettings, 
-  InsertTrack 
+  User, InsertUser,
+  Webcam, InsertWebcam,
+  SpotifyConfig, InsertSpotifyConfig,
+  SensorData, InsertSensorData,
+  ServoStatus, InsertServoStatus,
+  MusicStatus, InsertMusicStatus,
+  SystemSettings, InsertSystemSettings,
+  Track, InsertTrack,
+  users, webcams, spotifyConfig, sensorData, servoStatus, musicStatus, systemSettings, tracks
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
+
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
+  // User
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  // Webcam
+  getWebcams(userId: number): Promise<Webcam[]>;
+  createWebcam(webcam: InsertWebcam): Promise<Webcam>;
+  deleteWebcam(userId: number, id: number): Promise<void>;
+
+  // Spotify Config
+  getSpotifyConfig(userId: number): Promise<SpotifyConfig | undefined>;
+  createSpotifyConfig(config: InsertSpotifyConfig): Promise<SpotifyConfig>;
+  updateSpotifyConfig(userId: number, config: Partial<InsertSpotifyConfig>): Promise<SpotifyConfig>;
+
   // Sensor data
   insertSensorData(data: InsertSensorData): Promise<SensorData>;
-  getLatestSensorData(): Promise<SensorData | undefined>;
+  getLatestSensorData(userId?: number): Promise<SensorData | undefined>;
   
   // Servo status
   insertServoStatus(status: InsertServoStatus): Promise<ServoStatus>;
-  getLatestServoStatus(): Promise<ServoStatus | undefined>;
-  updateServoPosition(position: number): Promise<ServoStatus>;
+  getLatestServoStatus(userId: number): Promise<ServoStatus | undefined>;
+  updateServoPosition(userId: number, position: number): Promise<ServoStatus>;
   
   // Music status
   insertMusicStatus(status: InsertMusicStatus): Promise<MusicStatus>;
-  getLatestMusicStatus(): Promise<MusicStatus | undefined>;
-  updateMusicStatus(status: Partial<InsertMusicStatus>): Promise<MusicStatus>;
+  getLatestMusicStatus(userId: number): Promise<MusicStatus | undefined>;
+  updateMusicStatus(userId: number, status: Partial<InsertMusicStatus>): Promise<MusicStatus>;
   
   // System settings
-  getSystemSettings(): Promise<SystemSettings | undefined>;
-  updateSystemSettings(settings: Partial<InsertSystemSettings>): Promise<SystemSettings>;
+  getSystemSettings(userId: number): Promise<SystemSettings | undefined>;
+  updateSystemSettings(userId: number, settings: Partial<InsertSystemSettings>): Promise<SystemSettings>;
   
   // Tracks
   getAllTracks(): Promise<Track[]>;
   getTrack(id: number): Promise<Track | undefined>;
   insertTrack(track: InsertTrack): Promise<Track>;
+
+  sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private sensorData: SensorData[] = [];
-  private servoStatus: ServoStatus[] = [];
-  private musicStatus: MusicStatus[] = [];
-  private systemSettings: SystemSettings | undefined;
-  private tracks: Track[] = [];
-  private currentId = 1;
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
 
   constructor() {
-    // Initialize with default settings
-    this.systemSettings = {
-      id: 1,
-      tempThreshold: 78,
-      motionSensitivity: 3,
-      cryingDetectionEnabled: true,
-      autoResponse: true,
-      nightMode: false,
-      pushNotifications: true,
-      tempAlerts: true,
-      motionAlerts: false,
-    };
-
-    // Initialize with default tracks
-    this.tracks = [
-      { id: 1, name: "Brahms Lullaby", filename: "brahms-lullaby.mp3", duration: 242, artist: "Classical" },
-      { id: 2, name: "Twinkle Twinkle", filename: "twinkle-twinkle.mp3", duration: 204, artist: "Traditional" },
-      { id: 3, name: "Mozart Lullaby", filename: "mozart-lullaby.mp3", duration: 318, artist: "Classical" },
-      { id: 4, name: "Rock-a-bye Baby", filename: "rock-a-bye-baby.mp3", duration: 156, artist: "Traditional" },
-      { id: 5, name: "Hush Little Baby", filename: "hush-little-baby.mp3", duration: 187, artist: "Traditional" },
-    ];
-
-    // Initialize with default sensor data
-    this.sensorData.push({
-      id: 1,
-      temperature: 72.5,
-      objectDetected: null,
-      cryingDetected: false,
-      timestamp: new Date(),
-    });
-
-    // Initialize with default servo status
-    this.servoStatus.push({
-      id: 1,
-      position: 45,
-      isMoving: false,
-      autoRock: false,
-      timestamp: new Date(),
-    });
-
-    // Initialize with default music status
-    this.musicStatus.push({
-      id: 1,
-      timestamp: new Date(),
-      isPlaying: false,
-      volume: 50,
-      progress: 0,
-      currentTrack: null,
-      currentTrackArtist: null,
-      currentTrackAlbum: null,
-      currentTrackImageUrl: null,
-      spotifyConnected: false,
-      spotifyPlaylistId: null,
-      spotifyPlaylistName: null,
-      useSpotify: false,
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
     });
   }
 
+  // User
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  // Webcam
+  async getWebcams(userId: number): Promise<Webcam[]> {
+    return db.select().from(webcams).where(eq(webcams.userId, userId));
+  }
+
+  async createWebcam(webcam: InsertWebcam): Promise<Webcam> {
+    const [newWebcam] = await db.insert(webcams).values(webcam).returning();
+    return newWebcam;
+  }
+
+  async deleteWebcam(userId: number, id: number): Promise<void> {
+    await db.delete(webcams).where(and(eq(webcams.id, id), eq(webcams.userId, userId)));
+  }
+
+  // Spotify Config
+  async getSpotifyConfig(userId: number): Promise<SpotifyConfig | undefined> {
+    const [config] = await db.select().from(spotifyConfig).where(eq(spotifyConfig.userId, userId));
+    return config;
+  }
+
+  async createSpotifyConfig(config: InsertSpotifyConfig): Promise<SpotifyConfig> {
+    const [newConfig] = await db.insert(spotifyConfig).values(config).returning();
+    return newConfig;
+  }
+
+  async updateSpotifyConfig(userId: number, config: Partial<InsertSpotifyConfig>): Promise<SpotifyConfig> {
+    const [updated] = await db
+      .update(spotifyConfig)
+      .set(config)
+      .where(eq(spotifyConfig.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  // Sensor Data
   async insertSensorData(data: InsertSensorData): Promise<SensorData> {
-    const newData: SensorData = {
-      id: this.currentId++,
-      timestamp: new Date(),
-      temperature: data.temperature,
-      objectDetected: data.objectDetected === undefined ? null : data.objectDetected,
-      cryingDetected: data.cryingDetected === undefined ? false : data.cryingDetected,
-    };
-    this.sensorData.push(newData);
+    const [newData] = await db.insert(sensorData).values(data).returning();
     return newData;
   }
 
-  async getLatestSensorData(): Promise<SensorData | undefined> {
-    return this.sensorData[this.sensorData.length - 1];
-  }
-
-  async insertServoStatus(status: InsertServoStatus): Promise<ServoStatus> {
-    const newStatus: ServoStatus = {
-      id: this.currentId++,
-      timestamp: new Date(),
-      position: status.position === undefined ? 0 : status.position,
-      isMoving: status.isMoving === undefined ? false : status.isMoving,
-      autoRock: status.autoRock === undefined ? false : status.autoRock,
-    };
-    this.servoStatus.push(newStatus);
-    return newStatus;
-  }
-
-  async getLatestServoStatus(): Promise<ServoStatus | undefined> {
-    return this.servoStatus[this.servoStatus.length - 1];
-  }
-
-  async updateServoPosition(position: number): Promise<ServoStatus> {
-    const latest = await this.getLatestServoStatus();
-    return this.insertServoStatus({
-      position,
-      isMoving: latest?.isMoving === undefined ? false : latest.isMoving,
-      autoRock: latest?.autoRock === undefined ? false : latest.autoRock,
-    });
-  }
-
-  async insertMusicStatus(status: InsertMusicStatus): Promise<MusicStatus> {
-    const newStatus: MusicStatus = {
-      ...status,
-      currentTrack: status.currentTrack === undefined ? null : status.currentTrack,
-      currentTrackArtist: status.currentTrackArtist === undefined ? null : status.currentTrackArtist,
-      currentTrackAlbum: status.currentTrackAlbum === undefined ? null : status.currentTrackAlbum,
-      currentTrackImageUrl: status.currentTrackImageUrl === undefined ? null : status.currentTrackImageUrl,
-      isPlaying: status.isPlaying === undefined ? false : status.isPlaying,
-      volume: status.volume === undefined ? 50 : status.volume,
-      progress: status.progress === undefined ? 0 : status.progress,
-      spotifyConnected: status.spotifyConnected === undefined ? false : status.spotifyConnected,
-      spotifyPlaylistId: status.spotifyPlaylistId === undefined ? null : status.spotifyPlaylistId,
-      spotifyPlaylistName: status.spotifyPlaylistName === undefined ? null : status.spotifyPlaylistName,
-      useSpotify: status.useSpotify === undefined ? false : status.useSpotify,
-      id: this.currentId++,
-      timestamp: new Date(),
-    };
-    this.musicStatus.push(newStatus);
-    return newStatus;
-  }
-
-  async getLatestMusicStatus(): Promise<MusicStatus | undefined> {
-    return this.musicStatus[this.musicStatus.length - 1];
-  }
-
-  async updateMusicStatus(status: Partial<InsertMusicStatus>): Promise<MusicStatus> {
-    const latest = await this.getLatestMusicStatus();
-    if (latest) {
-      if (status.currentTrack !== undefined) {
-        latest.currentTrack = status.currentTrack;
-      }
-      if (status.currentTrackArtist !== undefined) {
-        latest.currentTrackArtist = status.currentTrackArtist;
-      }
-      if (status.currentTrackAlbum !== undefined) {
-        latest.currentTrackAlbum = status.currentTrackAlbum;
-      }
-      if (status.currentTrackImageUrl !== undefined) {
-        latest.currentTrackImageUrl = status.currentTrackImageUrl;
-      }
-      if (status.isPlaying !== undefined) {
-        latest.isPlaying = status.isPlaying;
-      }
-      if (status.volume !== undefined) {
-        latest.volume = status.volume;
-      }
-      if (status.progress !== undefined) {
-        latest.progress = status.progress;
-      }
-      if (status.spotifyConnected !== undefined) {
-        latest.spotifyConnected = status.spotifyConnected;
-      }
-      if (status.spotifyPlaylistId !== undefined) {
-        latest.spotifyPlaylistId = status.spotifyPlaylistId;
-      }
-      if (status.spotifyPlaylistName !== undefined) {
-        latest.spotifyPlaylistName = status.spotifyPlaylistName;
-      }
-      if (status.useSpotify !== undefined) {
-        latest.useSpotify = status.useSpotify;
-      }
-      latest.timestamp = new Date();
+  async getLatestSensorData(userId?: number): Promise<SensorData | undefined> {
+    if (userId) {
+      const [latest] = await db.select().from(sensorData).where(eq(sensorData.userId, userId)).orderBy(desc(sensorData.timestamp)).limit(1);
       return latest;
+    }
+    const [latest] = await db.select().from(sensorData).orderBy(desc(sensorData.timestamp)).limit(1);
+    return latest;
+  }
+
+  // Servo Status
+  async insertServoStatus(status: InsertServoStatus): Promise<ServoStatus> {
+    const [newStatus] = await db.insert(servoStatus).values(status).returning();
+    return newStatus;
+  }
+
+  async getLatestServoStatus(userId: number): Promise<ServoStatus | undefined> {
+    const [latest] = await db.select().from(servoStatus).where(eq(servoStatus.userId, userId)).orderBy(desc(servoStatus.timestamp)).limit(1);
+    return latest;
+  }
+
+  async updateServoPosition(userId: number, position: number): Promise<ServoStatus> {
+    const latest = await this.getLatestServoStatus(userId);
+    const newStatus = {
+      ...(latest || { userId }),
+      userId,
+      position,
+      isMoving: latest?.isMoving ?? false,
+      autoRock: latest?.autoRock ?? false,
+    };
+    // @ts-ignore
+    delete newStatus.id;
+    // @ts-ignore
+    delete newStatus.timestamp;
+    
+    return this.insertServoStatus(newStatus as InsertServoStatus);
+  }
+
+  // Music Status
+  async insertMusicStatus(status: InsertMusicStatus): Promise<MusicStatus> {
+    const [newStatus] = await db.insert(musicStatus).values(status).returning();
+    return newStatus;
+  }
+
+  async getLatestMusicStatus(userId: number): Promise<MusicStatus | undefined> {
+    const [latest] = await db.select().from(musicStatus).where(eq(musicStatus.userId, userId)).orderBy(desc(musicStatus.timestamp)).limit(1);
+    return latest;
+  }
+
+  async updateMusicStatus(userId: number, status: Partial<InsertMusicStatus>): Promise<MusicStatus> {
+    const latest = await this.getLatestMusicStatus(userId);
+    const newStatus = {
+      ...(latest || { userId }),
+      userId,
+      ...status,
+    };
+    // @ts-ignore
+    delete newStatus.id;
+    // @ts-ignore
+    delete newStatus.timestamp;
+    
+    return this.insertMusicStatus(newStatus as InsertMusicStatus);
+  }
+
+  // System Settings
+  async getSystemSettings(userId: number): Promise<SystemSettings | undefined> {
+    const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.userId, userId)).orderBy(desc(systemSettings.id)).limit(1);
+    return settings;
+  }
+
+  async updateSystemSettings(userId: number, settings: Partial<InsertSystemSettings>): Promise<SystemSettings> {
+    const current = await this.getSystemSettings(userId);
+    if (current) {
+      const [updated] = await db
+        .update(systemSettings)
+        .set(settings)
+        .where(eq(systemSettings.id, current.id))
+        .returning();
+      return updated;
     } else {
-      // If no music status exists, insert a new one with default values for missing properties
-      return this.insertMusicStatus({
-        currentTrack: status.currentTrack === undefined ? null : status.currentTrack,
-        currentTrackArtist: status.currentTrackArtist === undefined ? null : status.currentTrackArtist,
-        currentTrackAlbum: status.currentTrackAlbum === undefined ? null : status.currentTrackAlbum,
-        currentTrackImageUrl: status.currentTrackImageUrl === undefined ? null : status.currentTrackImageUrl,
-        isPlaying: status.isPlaying === undefined ? false : status.isPlaying,
-        volume: status.volume === undefined ? 50 : status.volume,
-        progress: status.progress === undefined ? 0 : status.progress,
-        spotifyConnected: status.spotifyConnected === undefined ? false : status.spotifyConnected,
-        spotifyPlaylistId: status.spotifyPlaylistId === undefined ? null : status.spotifyPlaylistId,
-        spotifyPlaylistName: status.spotifyPlaylistName === undefined ? null : status.spotifyPlaylistName,
-        useSpotify: status.useSpotify === undefined ? false : status.useSpotify,
-      });
+      const [created] = await db.insert(systemSettings).values({ ...settings, userId } as InsertSystemSettings).returning();
+      return created;
     }
   }
 
-  async getSystemSettings(): Promise<SystemSettings | undefined> {
-    return this.systemSettings;
-  }
-
-  async updateSystemSettings(settings: Partial<InsertSystemSettings>): Promise<SystemSettings> {
-    if (this.systemSettings) {
-      this.systemSettings = { ...this.systemSettings, ...settings };
-    }
-    return this.systemSettings!;
-  }
-
+  // Tracks
   async getAllTracks(): Promise<Track[]> {
-    return this.tracks;
+    return db.select().from(tracks);
   }
 
   async getTrack(id: number): Promise<Track | undefined> {
-    return this.tracks.find(track => track.id === id);
+    const [track] = await db.select().from(tracks).where(eq(tracks.id, id));
+    return track;
   }
 
   async insertTrack(track: InsertTrack): Promise<Track> {
-    const newTrack: Track = {
-      id: this.currentId++,
-      name: track.name,
-      filename: track.filename,
-      duration: track.duration,
-      artist: track.artist === undefined ? null : track.artist,
-    };
-    this.tracks.push(newTrack);
+    const [newTrack] = await db.insert(tracks).values(track).returning();
     return newTrack;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

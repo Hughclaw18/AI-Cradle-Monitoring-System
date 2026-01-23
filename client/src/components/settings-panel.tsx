@@ -4,6 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import { SystemSettings } from "@shared/schema";
+import { WebcamManager } from "./webcam-manager";
 
 interface SettingsPanelProps {
   settings: SystemSettings;
@@ -27,6 +28,9 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
 
   return (
     <div className="space-y-4">
+      {/* Camera Management */}
+      <WebcamManager />
+
       {/* Sensor Settings */}
       <Card>
         <CardContent className="p-4">

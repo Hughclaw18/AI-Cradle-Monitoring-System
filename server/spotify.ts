@@ -1,14 +1,11 @@
 import * as SpotifyApiModule from "@spotify/web-api-ts-sdk";
 import { URLSearchParams } from "url";
+import { storage } from "./storage";
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "69bf2fb863af44c1b890327fb1f1efec";
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "58c63fd24c884237a3d510cfc9bd6fc0";
-// const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
-const REDIRECT_URI = "https://smartcradlemonitor.onrender.com/api/spotify/callback";
-let accessToken: string | null = null;
-let refreshToken: string | null = null;
-let expiresIn: number = 0;
-let tokenTimestamp: number = 0;
+const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || "http://127.0.0.1:3000/api/spotify/callback";
+// const REDIRECT_URI = "https://smartcradlemonitor.onrender.com/api/spotify/callback";
 
 export function getSpotifyAuthUrl() {
   const scope = "user-read-private user-read-email playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state user-read-currently-playing";
@@ -40,21 +37,23 @@ export async function exchangeCodeForTokens(code: string) {
 
   const data = await response.json();
   if (response.ok) {
-    accessToken = data.access_token;
-    refreshToken = data.refresh_token;
-    expiresIn = data.expires_in;
-    tokenTimestamp = Date.now();
-    return true;
+    console.log("Spotify Token Exchange Successful");
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+    };
   } else {
     console.error("Error exchanging code for tokens:", data);
-    return false;
+    return null;
   }
 }
 
-async function refreshAccessToken() {
+async function refreshAccessToken(refreshToken: string) {
+  console.log("Attempting to refresh Spotify access token...");
   const params = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: refreshToken || "",
+    refresh_token: refreshToken,
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
   });
@@ -69,46 +68,56 @@ async function refreshAccessToken() {
 
   const data = await response.json();
   if (response.ok) {
-    accessToken = data.access_token;
-    expiresIn = data.expires_in;
-    tokenTimestamp = Date.now();
-    return true;
+    return {
+      accessToken: data.access_token,
+      expiresIn: data.expires_in,
+      refreshToken: data.refresh_token, // Sometimes we get a new refresh token
+    };
   } else {
     console.error("Error refreshing access token:", data);
-    return false;
+    return null;
   }
 }
 
-async function getAccessToken() {
-  if (!accessToken || (Date.now() - tokenTimestamp) / 1000 >= expiresIn) {
-    if (refreshToken) {
-      await refreshAccessToken();
-    } else {
-      throw new Error("No access token or refresh token available. Please connect to Spotify.");
-    }
-  }
-  return accessToken;
-}
-
-export async function getUncachableSpotifyClient() {
-  const currentAccessToken = await getAccessToken();
-  if (!currentAccessToken) {
+export async function getUncachableSpotifyClient(userId: number) {
+  const config = await storage.getSpotifyConfig(userId);
+  if (!config || !config.accessToken || !config.refreshToken) {
     throw new Error("Spotify not connected.");
   }
 
+  let accessToken = config.accessToken;
+  let expiresAt = config.expiresAt || 0;
+
+  // Check if expired (buffer of 60 seconds)
+  if (Date.now() / 1000 > expiresAt - 60) {
+    const refreshed = await refreshAccessToken(config.refreshToken);
+    if (refreshed) {
+      accessToken = refreshed.accessToken;
+      const newExpiresAt = Math.floor(Date.now() / 1000) + refreshed.expiresIn;
+      
+      await storage.updateSpotifyConfig(userId, {
+        accessToken: refreshed.accessToken,
+        expiresAt: newExpiresAt,
+        refreshToken: refreshed.refreshToken || config.refreshToken,
+      });
+    } else {
+      throw new Error("Failed to refresh Spotify token");
+    }
+  }
+
   const spotify = SpotifyApiModule.SpotifyApi.withAccessToken(CLIENT_ID, {
-    access_token: currentAccessToken as string,
+    access_token: accessToken,
     token_type: "Bearer",
-    expires_in: expiresIn,
-    refresh_token: refreshToken || "",
+    expires_in: 3600, // Not strictly used by the SDK if we manage refresh manually
+    refresh_token: config.refreshToken,
   });
 
   return spotify;
 }
 
-export async function getCurrentlyPlayingTrack() {
-  const spotify = await getUncachableSpotifyClient();
+export async function getCurrentlyPlayingTrack(userId: number) {
   try {
+    const spotify = await getUncachableSpotifyClient(userId);
     const currentPlayback = await spotify.player.getCurrentlyPlayingTrack();
     console.log("Spotify API - Currently Playing Track:", currentPlayback);
     if (currentPlayback && currentPlayback.item && currentPlayback.item.type === "track") {
@@ -127,26 +136,23 @@ export async function getCurrentlyPlayingTrack() {
   }
 }
 
-export async function isSpotifyConnected(): Promise<boolean> {
+export async function isSpotifyConnected(userId: number): Promise<boolean> {
   try {
-    await getAccessToken();
-    return true;
+    const config = await storage.getSpotifyConfig(userId);
+    return !!(config && config.accessToken && config.refreshToken);
   } catch (error) {
     return false;
   }
 }
 
-export async function stopPlayback(deviceId?: string) {
-  const spotify = await getUncachableSpotifyClient();
+export async function stopPlayback(userId: number, deviceId?: string) {
   try {
+    const spotify = await getUncachableSpotifyClient(userId);
     const currentPlaybackState = await spotify.player.getPlaybackState();
     const activeDeviceId = currentPlaybackState?.device?.id;
 
     // Temporarily cast actions to any to bypass TypeScript error regarding 'disallows'
     const actions: any = currentPlaybackState?.actions;
-
-    console.log("currentPlaybackState.actions:", currentPlaybackState?.actions);
-    console.log("actions?.disallows?.pausing:", actions?.disallows?.pausing);
 
     if (deviceId && activeDeviceId && deviceId === activeDeviceId) {
       if (actions?.disallows?.pausing) {
@@ -176,9 +182,9 @@ export async function stopPlayback(deviceId?: string) {
   }
 }
 
-export async function skipToNextTrack(deviceId?: string) {
-  const spotify = await getUncachableSpotifyClient();
+export async function skipToNextTrack(userId: number, deviceId?: string) {
   try {
+    const spotify = await getUncachableSpotifyClient(userId);
     const currentPlaybackState = await spotify.player.getPlaybackState();
     const activeDeviceId = currentPlaybackState?.device?.id;
     const targetDeviceId = deviceId || activeDeviceId;
@@ -194,9 +200,9 @@ export async function skipToNextTrack(deviceId?: string) {
   }
 }
 
-export async function skipToPreviousTrack(deviceId?: string) {
-  const spotify = await getUncachableSpotifyClient();
+export async function skipToPreviousTrack(userId: number, deviceId?: string) {
   try {
+    const spotify = await getUncachableSpotifyClient(userId);
     const currentPlaybackState = await spotify.player.getPlaybackState();
     const activeDeviceId = currentPlaybackState?.device?.id;
     const targetDeviceId = deviceId || activeDeviceId;
@@ -212,9 +218,9 @@ export async function skipToPreviousTrack(deviceId?: string) {
   }
 }
 
-export async function startPlaylistPlayback(deviceId?: string, playlistId?: string) {
-  const spotify = await getUncachableSpotifyClient();
+export async function startPlaylistPlayback(userId: number, deviceId?: string, playlistId?: string) {
   try {
+    const spotify = await getUncachableSpotifyClient(userId);
     const currentPlaybackState = await spotify.player.getPlaybackState();
     const activeDeviceId = currentPlaybackState?.device?.id;
     const targetDeviceId = deviceId || activeDeviceId;
@@ -244,8 +250,8 @@ export async function startPlaylistPlayback(deviceId?: string, playlistId?: stri
     }
     console.log("Started playback successfully.");
     // Add a small delay to allow Spotify API to update playback state
-    await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
-    const currentTrack = await getCurrentlyPlayingTrack();
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+    const currentTrack = await getCurrentlyPlayingTrack(userId);
     return currentTrack;
   } catch (error) {
     console.error("Error starting playback:", error);

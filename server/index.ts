@@ -1,11 +1,17 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { setupAuth } from "./auth";
 import { setupVite, serveStatic, log } from "./vite";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
+import cors from "cors";
 
 const app = express();
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -41,9 +47,9 @@ app.use((req, res, next) => {
 
 (async () => {
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  setupAuth(app);
 
-  const server = await registerRoutes(app);
+  const server = await registerRoutes(app, httpServer);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -57,7 +63,7 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
-    await setupVite(app, server);
+    await setupVite(app, httpServer);
   } else {
     serveStatic(app);
   }
@@ -66,20 +72,20 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   // un-comment below port while running locally
-  // const port = 3000;
-  // server.listen({
-  //   port,
-  //   host: "127.0.0.1",
-  // }, () => {
-  //   log(`serving on port ${port}`);
-
-  // below is for render deployment
-   const PORT = process.env.PORT || 3000;
-  server.listen({
-    port: Number(PORT),
+  const port = Number(process.env.PORT) || 3000;
+  httpServer.listen({
+    port,
     host: "0.0.0.0",
   }, () => {
-    log(`Server running on port ${PORT}`);
+    log(`serving on port ${port}`);
+
+  // // below is for render deployment
+  //  const PORT = process.env.PORT || 3000;
+  // server.listen({
+  //   port: Number(PORT),
+  //   host: "0.0.0.0",
+  // }, () => {
+    // log(`Server running on port ${PORT}`);
   }).on('error', (err: Error) => {
     console.error('Server failed to start:', err.message);
     process.exit(1);
