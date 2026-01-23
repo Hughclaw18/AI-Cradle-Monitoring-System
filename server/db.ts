@@ -1,16 +1,18 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
-
-if (!process.env.DATABASE_URL) {
+const DB_URL = process.env.DATABASE_URL || "";
+if (!DB_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
 export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL.includes("render.com") || process.env.DATABASE_URL.includes("neon.tech")
+  connectionString: DB_URL,
+  ssl: DB_URL.includes("render.com") || 
+       DB_URL.includes("neon.tech") || 
+       DB_URL.includes("ssl=true")
     ? { rejectUnauthorized: false }
     : undefined,
 });

@@ -68,7 +68,7 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // serve the app on port 5000 in development, or process.env.PORT in production
+  // serve the app on process.env.PORT (Render sets this) or fallback to 3000
   const port = Number(process.env.PORT) || 3000;
   httpServer.listen({
     port,
