@@ -65,7 +65,7 @@ Follow these steps to set up the project dependencies:
     To enable Spotify integration, you need to configure your Spotify API credentials:
 
     *   **Create an Application**: Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/) and create a new application.
-    *   **Set Redirect URI**: In your Spotify application settings, add `http://localhost:3000/api/spotify/callback` as a Redirect URI.
+    *   **Set Redirect URI**: In your Spotify application settings, add `http://localhost:5000/api/spotify/callback` as a Redirect URI.
     *   **Environment Variables**: Create a `.env` file in the project root directory (`SmartCradleMonitor/`) and add your Spotify Client ID and Client Secret:
 
         ```env
@@ -85,8 +85,8 @@ To get the Smart Cradle Monitor up and running, follow these steps:
     npm run dev
     ```
 
-    *   The server will be accessible at `http://localhost:3000`.
-    *   The WebSocket endpoint for real-time communication is `ws://localhost:3000/ws`.
+    *   The server will be accessible at `http://localhost:5000`.
+    *   The WebSocket endpoint for real-time communication is `ws://localhost:5000/ws`.
 
 2.  **Start the Streamlit Simulator**
 

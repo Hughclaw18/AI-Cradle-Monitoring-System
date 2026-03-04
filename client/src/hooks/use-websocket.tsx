@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { SensorData, ServoStatus, MusicStatus, SystemSettings } from "@shared/schema";
 
 export interface WebSocketMessage {
-  type: 'initial_data' | 'sensor_update' | 'servo_update' | 'music_update' | 'notification' | 'settings_update';
+  type: 'initial_data' | 'sensor_update' | 'servo_update' | 'music_update' | 'notification' | 'settings_update' | 'video_frame';
   data: any;
 }
 
@@ -26,11 +26,12 @@ export function useWebSocket() {
   const [musicStatus, setMusicStatus] = useState<MusicStatus | null>(null);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [videoFrame, setVideoFrame] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = `${protocol}//${window.location.host}/socket`;
     
     const connect = () => {
       const ws = new WebSocket(wsUrl);
@@ -73,6 +74,10 @@ export function useWebSocket() {
             case 'notification':
               const notification = message.data as NotificationData;
               setNotifications(prev => [...prev, notification]);
+              break;
+
+            case 'video_frame':
+              setVideoFrame(message.data as string);
               break;
           }
         } catch (error) {
@@ -117,6 +122,7 @@ export function useWebSocket() {
     musicStatus,
     settings,
     notifications,
+    videoFrame,
     dismissNotification,
     clearAllNotifications,
   };

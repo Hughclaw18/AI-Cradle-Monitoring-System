@@ -22,16 +22,16 @@ from utils.inference import (
 
 st.set_page_config(page_title="Baby Posture, Object Detection & Sensor Simulator", layout="wide")
 
-WEBSOCKET_URL = "ws://127.0.0.1:3000/ws"
+WEBSOCKET_URL = "ws://127.0.0.1:5000/ws"
 
 st.title("👶 Baby Posture/Object Detection & Sensor Simulator")
 
-_ = load_posture_detection_model("simulator/models/best.pt")
-_ = load_object_detection_model("simulator/models/yoloe-11s-seg.pt")
-_ = load_cry_detection_model("models/cry_detection_yoloe.pt")
+_ = load_posture_detection_model()
+_ = load_object_detection_model()
+_ = load_cry_detection_model()
 
-posture_model = load_posture_detection_model("simulator/models/best.pt")
-object_model = load_object_detection_model("simulator/models/yoloe-11s-seg.pt")
+posture_model = load_posture_detection_model()
+object_model = load_object_detection_model()
 
 
 def send_sensor_data(ws, temperature, crying_detected, object_detected_list):

@@ -5,7 +5,7 @@ import time
 import random
 
 # Define the WebSocket server URL
-WEBSOCKET_URL = "ws://127.0.0.1:3000/ws"
+WEBSOCKET_URL = "ws://127.0.0.1:5000/ws"
 
 st.title("Streamlit Sensor Data Sender")
 

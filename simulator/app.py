@@ -6,6 +6,8 @@ import websocket
 import json
 import time
 import requests
+import cv2
+import base64
 from utils.model_loader import load_cry_detection_model, load_object_detection_model, load_posture_detection_model
 from utils.inference import predict_cry, predict_object, process_video_for_detection, predict_posture
 
@@ -13,8 +15,13 @@ from utils.inference import predict_cry, predict_object, process_video_for_detec
 st.set_page_config(page_title="Baby Posture Detection", layout="wide")
 
 # Define the WebSocket server URL and API URL
-WEBSOCKET_URL = "ws://127.0.0.1:3000/ws"
-API_URL = "http://127.0.0.1:3000/api"
+WEBSOCKET_URL = "ws://127.0.0.1:5000/socket"
+API_URL = "http://127.0.0.1:5000/api"
+SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
+from config import WIDTH, HEIGHT, SEND_INTERVAL_FRAMES
+def get_base64_frame(frame):
+    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    return base64.b64encode(buffer).decode('utf-8')
 
 # Initialize session state for auth
 if 'cookies' not in st.session_state:
@@ -44,6 +51,38 @@ with st.sidebar:
                     st.error("Login failed. Please check credentials.")
             except Exception as e:
                 st.error(f"Connection error: {e}")
+        st.divider()
+        st.subheader("Register")
+        reg_name = st.text_input("Full Name")
+        reg_email = st.text_input("Email")
+        reg_username = st.text_input("New Username")
+        reg_password = st.text_input("New Password", type="password")
+        reg_address = st.text_input("Address (optional)")
+        reg_phone = st.text_input("Phone (optional)")
+        if st.button("Create Account"):
+            try:
+                payload = {
+                    "name": reg_name,
+                    "email": reg_email,
+                    "username": reg_username,
+                    "password": reg_password,
+                    "address": reg_address or None,
+                    "phone": reg_phone or None,
+                }
+                response = requests.post(f"{API_URL}/register", json=payload)
+                if response.status_code in (200, 201):
+                    st.session_state.cookies = response.cookies
+                    st.session_state.username = reg_username
+                    st.success(f"Registered and logged in as {reg_username}")
+                    st.rerun()
+                else:
+                    try:
+                        err_text = response.text
+                    except:
+                        err_text = "Registration failed."
+                    st.error(err_text)
+            except Exception as e:
+                st.error(f"Registration error: {e}")
     else:
         st.write(f"Logged in as **{st.session_state.username}**")
         if st.button("Logout"):
@@ -54,22 +93,34 @@ with st.sidebar:
                 st.session_state.ws = None
             st.rerun()
 
-# Pre-load models into cache (messages removed as per user request)
-_ = load_posture_detection_model("simulator/models/best.pt")
-_ = load_object_detection_model("simulator/models/yoloe-11s-seg.pt")
-_ = load_cry_detection_model("models/cry_detection_yoloe.pt")
+# Title
+st.title("👶 Baby Posture and Object Detection")
+
+# --- Model Initialization (Cached) ---
+@st.cache_resource
+def get_posture_model():
+    return load_posture_detection_model()
+
+@st.cache_resource
+def get_object_model():
+    return load_object_detection_model()
+
+@st.cache_resource
+def get_cry_model():
+    return load_cry_detection_model()
+
+posture_model = get_posture_model()
+object_model = get_object_model()
+cry_model = get_cry_model()
 
 st.header("Image and Video Analysis (Posture & Object Detection)")
 st.write("Upload an image or video to detect the baby's posture and objects around the baby simultaneously.")
-
-# Models are already loaded and cached, no need to load again here
-posture_model = load_posture_detection_model("simulator/models/best.pt")
-object_model = load_object_detection_model("simulator/models/yoloe-11s-seg.pt")
 
 # Function to send sensor data
 def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
     try:
         sensor_data = {
+            "sensor_id": st.session_state.username or "anonymous",
             "id": 1,
             "timestamp": time.time() * 1000,
             "temperature": temperature,
@@ -84,6 +135,15 @@ def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
 
         ws.send(json.dumps(message))
         st.success(f"Sent sensor data: {json.dumps(sensor_data)}")
+    except (ConnectionResetError, websocket.WebSocketConnectionClosedException, OSError) as e:
+        st.error(f"Connection lost: {e}")
+        # Reset connection state
+        if st.session_state.ws:
+            try:
+                st.session_state.ws.close()
+            except:
+                pass
+        st.session_state.ws = None
     except Exception as e:
         st.error(f"Error sending data: {e}")
 
@@ -92,7 +152,7 @@ if 'ws' not in st.session_state:
     st.session_state.ws = None
 if 'frame_counter' not in st.session_state:
     st.session_state.frame_counter = 0 # Initialize frame counter
-SEND_INTERVAL_FRAMES = 10 # Send data every 10 frames
+SEND_INTERVAL_FRAMES = SEND_INTERVAL_FRAMES
 
 st.subheader("WebSocket Connection")
 col_ws1, col_ws2 = st.columns(2)
@@ -102,16 +162,18 @@ with col_ws1:
         if st.session_state.ws and st.session_state.ws.connected:
             st.warning("Already connected to WebSocket.")
         else:
-            if not st.session_state.cookies:
-                st.error("Please login first to connect to the server.")
-            else:
-                try:
-                    # Construct cookie string for WebSocket
+            # Check for authentication if needed, or try connecting
+            try:
+                if st.session_state.cookies:
                     cookie_string = "; ".join([f"{k}={v}" for k, v in st.session_state.cookies.get_dict().items()])
                     st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, cookie=cookie_string)
-                    st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
-                except Exception as e:
-                    st.error(f"Failed to connect to WebSocket: {e}")
+                else:
+                    headers = {"x-simulator-token": SIMULATOR_TOKEN}
+                    st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, header=headers)
+                
+                st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
+            except Exception as e:
+                st.error(f"Failed to connect to WebSocket: {e}")
 
 with col_ws2:
     if st.button("Disconnect from WebSocket", key="disconnect_ws"):
@@ -122,9 +184,111 @@ with col_ws2:
         else:
             st.warning("Not connected to WebSocket.")
 
-file_type = st.radio("Select input type", ["Image", "Video"])
 
-if file_type == "Image":
+st.header("Sensor Data Simulator")
+
+st.subheader("Sensor Data Inputs")
+temperature_input = st.slider(
+    "Temperature", min_value=60.0, max_value=100.0, value=75.0, step=0.1
+)
+crying_detected_input = st.checkbox("Crying Detected", value=False)
+object_detected_input = st.multiselect(
+    "Objects Detected",
+    ["toy", "bottle", "blanket", "pacifier"],
+    [],
+)
+
+if st.button("Send Sensor Data"):
+    if st.session_state.ws and st.session_state.ws.connected:
+        send_sensor_data(
+            st.session_state.ws,
+            temperature_input,
+            crying_detected_input,
+            object_detected_input,
+        )
+    else:
+        st.warning("Please connect to WebSocket first.")
+
+st.subheader("Manual Cry Notification")
+if st.button("Send Cry Notification"):
+    if st.session_state.ws and st.session_state.ws.connected:
+        send_sensor_data(
+            st.session_state.ws,
+            temperature_input,
+            True,
+            object_detected_input,
+        )
+    else:
+        st.warning("Please connect to WebSocket first.")
+
+st.subheader("Auto-send Random Sensor Data")
+auto_send_enabled = st.checkbox("Enable Auto-send (every 5 seconds)")
+
+if auto_send_enabled:
+    if st.session_state.ws and st.session_state.ws.connected:
+        st.write("Auto-sending random sensor data...")
+
+        random_temperature = round(np.random.uniform(70.0, 85.0), 2)
+        random_crying_detected = bool(np.random.choice([True, False]))
+        random_object_detected = []
+        if np.random.random() < 0.3:
+            random_object_detected.append(
+                np.random.choice(["toy", "bottle", "blanket"])
+            )
+
+        send_sensor_data(
+            st.session_state.ws,
+            random_temperature,
+            random_crying_detected,
+            random_object_detected,
+        )
+        time.sleep(5)
+        st.rerun()
+    else:
+        st.warning("Connect to WebSocket to enable auto-send.")
+        # Attempt auto-reconnect if configured or just pause
+        if st.button("Reconnect", key="reconnect_auto"):
+             st.rerun()
+
+file_type = st.radio("Select input type", ["Image", "Video", "Audio"])
+
+if file_type == "Audio":
+    st.caption("Tip: WAV works out-of-the-box. MP3/M4A need FFmpeg shared libraries for TorchCodec.")
+    uploaded_file = st.file_uploader("Upload an audio file...", type=["wav"])
+    if uploaded_file is not None:
+        st.write("Performing cry detection analysis...")
+        
+        # Perform cry detection inference
+        cry_results = predict_cry(cry_model, uploaded_file)
+        
+        if "error" in cry_results:
+            st.error(f"Cry Detection Error: {cry_results['error']}")
+            err = str(cry_results["error"]).lower()
+            if "torchcodec" in err or "libtorchcodec" in err:
+                st.info("On Windows, install FFmpeg shared build and ensure it's on PATH, then restart the simulator. Alternatively, upload a WAV file instead of MP3/M4A.")
+        else:
+            st.audio(uploaded_file)
+            st.subheader("Cry Analysis Result:")
+            
+            is_crying = cry_results["is_crying"]
+            confidence = cry_results["confidence"]
+            message = cry_results["message"]
+            
+            if is_crying:
+                st.error(f"🚨 **{message}**")
+            else:
+                st.success(f"✅ {message}")
+                
+            # Send sensor data via WebSocket
+            if st.session_state.ws and st.session_state.ws.connected:
+                temperature = 75.0 # Default
+                # In app.py, object_detected_list should be strings
+                send_sensor_data(st.session_state.ws, temperature, is_crying, [])
+                st.info("Cry detection status sent to dashboard.")
+            else:
+                st.warning("Connect to WebSocket to send sensor data.")
+
+elif file_type == "Image":
     uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
             st.write("Performing posture and object detection...")
@@ -230,8 +394,16 @@ elif file_type == "Video":
                         status_message_placeholder.success("Video analysis complete!")
                         break # Exit loop after receiving final summary
                 else: # This is a yielded frame and its per-frame results (a tuple)
-                    frame, current_posture, current_frame_objects, current_frame_hazardous_objects = yielded_item
+                    frame, current_posture, current_frame_objects, current_frame_hazardous_objects, crying_flag = yielded_item
                     live_video_placeholder.image(frame, channels="BGR", use_container_width=True)
+                    if st.session_state.ws and st.session_state.ws.connected:
+                        resized = cv2.resize(frame, (WIDTH, HEIGHT))
+                        b64 = get_base64_frame(resized)
+                        msg = {"type": "video_frame", "data": b64}
+                        try:
+                            st.session_state.ws.send(json.dumps(msg))
+                        except Exception as e:
+                            pass
                     
                     posture_summary_placeholder.write(f"**Posture Status (Current Frame):** {current_posture}")
                     objects_detected_placeholder.write(f"**Objects Detected (Current Frame):** {', '.join(current_frame_objects) if current_frame_objects else 'None'}")
@@ -257,7 +429,7 @@ elif file_type == "Video":
 
                         if should_send:
                             temperature = round(np.random.uniform(70.0, 85.0), 2) # Simulate temperature for video
-                            crying_detected = bool(np.random.choice([True, False])) # Cast to Python bool
+                            crying_detected = bool(crying_flag)
                             
                             # Determine object status message
                             object_status_message = ""

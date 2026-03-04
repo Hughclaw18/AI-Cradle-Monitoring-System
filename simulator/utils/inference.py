@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 from PIL import Image, ImageDraw
 import io
@@ -7,7 +8,14 @@ import cv2
 import supervision as sv
 import tempfile
 import shutil
-from ultralytics import YOLO, YOLOE # Import YOLO for posture detection, YOLOE for object detection
+import torchaudio
+import torchaudio.transforms as T
+from scipy.io import wavfile
+from ultralytics import YOLO, YOLOE
+from utils.model_loader import HAZARDOUS_CLASSES
+from config import FFMPEG_PATH, AUDIO_WIN_SEC
+MEL = T.MelSpectrogram(sample_rate=16000, n_fft=1024, hop_length=512, n_mels=64)
+DB = T.AmplitudeToDB()
 
 def predict_posture(model, image_file):
     """
@@ -143,7 +151,7 @@ def predict_object(model, image_file):
             
             # Filter for hazardous objects (these classes are set in model_loader.py)
             if detected_objects:
-                found_hazardous = list(set(detected_objects)) # Remove duplicates
+                found_hazardous = list(set([obj for obj in detected_objects if obj in HAZARDOUS_CLASSES])) # Filter against HAZARDOUS_CLASSES
 
             # Annotate image using supervision
             bounding_box_annotator = sv.BoxAnnotator()
@@ -189,22 +197,131 @@ def predict_object(model, image_file):
 
 def predict_cry(model, audio_file):
     """
-    Runs cry detection inference on an audio file.
+    Runs cry detection inference on an audio file using Mel spectrogram analysis.
     Args:
-        model: Loaded YOLOe cry detection model.
+        model: Loaded CryCNN model.
         audio_file: Uploaded audio file from Streamlit.
     Returns:
-        Detection results.
+        dict: Detection results.
     """
     try:
-        # For audio, you'd typically load the audio, preprocess it (e.g., Mel spectrogram)
-        # and then pass it to the model.
-        # This is a placeholder for actual YOLOe audio inference logic.
-        audio_bytes = audio_file.read()
-        results = f"Detected cry in audio (dummy result for {audio_file.name}, length: {len(audio_bytes)} bytes)"
+        # Load audio using scipy.io.wavfile to avoid torchaudio/torchcodec issues
+        # First, we need to save the bytes to a temporary file because wavfile.read needs a file path or file-like object
+        audio_bytes = audio_file.getvalue()
+        buffer = io.BytesIO(audio_bytes)
+        
+        try:
+            sample_rate, data = wavfile.read(buffer)
+            # Convert to float32 tensor
+            if data.dtype == np.int16:
+                waveform = torch.from_numpy(data.astype(np.float32) / 32768.0)
+            elif data.dtype == np.float32:
+                waveform = torch.from_numpy(data)
+            else:
+                waveform = torch.from_numpy(data.astype(np.float32))
+            
+            # wavfile.read returns (samples, channels) for multi-channel, (samples,) for mono
+            if len(waveform.shape) == 1:
+                waveform = waveform.unsqueeze(0) # (1, samples)
+            else:
+                waveform = waveform.t() # (channels, samples)
+                
+        except Exception as e:
+            # Fallback to torchaudio if wavfile fails (might happen for non-WAV files)
+            waveform, sample_rate = torchaudio.load(io.BytesIO(audio_bytes))
+        
+        # Resample to 16kHz if necessary
+        target_sample_rate = 16000
+        if sample_rate != target_sample_rate:
+            resampler = T.Resample(sample_rate, target_sample_rate)
+            waveform = resampler(waveform)
+        
+        # Convert to mono if multi-channel
+        if waveform.shape[0] > 1:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
+        # Define Mel Spectrogram transform
+        n_mels = 64
+        mel_spectrogram_transform = T.MelSpectrogram(
+            sample_rate=target_sample_rate,
+            n_fft=1024,
+            hop_length=512,
+            n_mels=n_mels
+        )
+        
+        # Compute Mel Spectrogram
+        mel_spec = mel_spectrogram_transform(waveform)
+        
+        # Convert to log-Mel spectrogram (decibels)
+        mel_spec_db = T.AmplitudeToDB()(mel_spec)
+        
+        # Apply Z-score normalization for background noise robustness
+        # This helps the model focus on the relative patterns rather than absolute volume
+        mean = mel_spec_db.mean()
+        std = mel_spec_db.std()
+        mel_spec_db = (mel_spec_db - mean) / (std + 1e-6)
+        
+        # Prepare for model inference (batch_size, channels, height, width)
+        # We need 64x64 input. Let's crop or pad.
+        # Current mel_spec_db shape is (1, 64, time_steps)
+        time_steps = mel_spec_db.shape[2]
+        if time_steps < 64:
+            # Pad
+            mel_spec_db = F.pad(mel_spec_db, (0, 64 - time_steps))
+        elif time_steps > 64:
+            # Crop (take the middle)
+            start = (time_steps - 64) // 2
+            mel_spec_db = mel_spec_db[:, :, start:start+64]
+        
+        # Final shape (1, 64, 64)
+        mel_spec_db = mel_spec_db[:, :, :64]
+            
+        # Add batch dimension
+        input_tensor = mel_spec_db.unsqueeze(0) # Shape: (1, 1, 64, 64)
+        
+        # Default values
+        prediction = 0
+        confidence = 0.0
+        
+        # Perform inference
+        if model is not None and not isinstance(model, str):
+            with torch.no_grad():
+                output = model(input_tensor)
+                probabilities = F.softmax(output, dim=1)
+                prediction = torch.argmax(probabilities, dim=1).item()
+                confidence = probabilities[0][prediction].item()
+            
+        # Class 1 is "Cry"
+        is_crying = (prediction == 1)
+        
+        # Heuristic/Demo Mode logic if weights are missing
+        if model is None or isinstance(model, str):
+            # If we're in demo mode (no model), use a simple frequency heuristic
+            # Calculate the spectral centroid or just look at the high-frequency energy
+            # mel_spec_db has shape (1, 64, 64) after processing
+            # High frequency indices are higher up (e.g., 32-64)
+            high_freq_energy = mel_spec_db[0, 32:, :].mean().item()
+            low_freq_energy = mel_spec_db[0, :32, :].mean().item()
+            
+            # Simple heuristic: if high freq energy is significantly higher, simulate a cry
+            if high_freq_energy > low_freq_energy + 0.5:
+                is_crying = True
+                confidence = 0.85
+            else:
+                is_crying = False
+                confidence = 0.92
+        
+        result_text = "Crying Detected!" if is_crying else "No Crying Detected."
+        
+        results = {
+            "is_crying": is_crying,
+            "confidence": float(confidence),
+            "message": f"{result_text} (Confidence: {confidence:.2f})"
+        }
+        
         return results
     except Exception as e:
-        return f"Error during cry detection: {e}"
+        return {"error": f"Error during cry detection: {e}"}
 
 def process_video_for_detection(posture_model, object_model, video_file):
     """
@@ -223,11 +340,22 @@ def process_video_for_detection(posture_model, object_model, video_file):
     """
     temp_input_video_path = None
     temp_output_video_path = None
+    temp_audio_path = None
     try:
         # Save the uploaded video to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_input_video:
             temp_input_video.write(video_file.getvalue())
             temp_input_video_path = temp_input_video.name
+
+        # Extract audio to WAV (16kHz mono) using FFmpeg
+        try:
+            import subprocess
+            ffmpeg_path = FFMPEG_PATH if os.path.exists(FFMPEG_PATH) else "ffmpeg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_file:
+                temp_audio_path = temp_audio_file.name
+            subprocess.run([ffmpeg_path, "-y", "-i", temp_input_video_path, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", temp_audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as _fferr:
+            temp_audio_path = None
 
         cap = cv2.VideoCapture(temp_input_video_path)
         if not cap.isOpened():
@@ -256,6 +384,27 @@ def process_video_for_detection(posture_model, object_model, video_file):
         box_annotator = sv.BoxAnnotator()
         label_annotator = sv.LabelAnnotator(text_color=sv.Color.BLACK)
 
+        # Load audio waveform if available
+        audio_waveform = None
+        audio_sr = 16000
+        if temp_audio_path and os.path.exists(temp_audio_path):
+            try:
+                sr, data = wavfile.read(temp_audio_path)
+                audio_sr = sr
+                if data.dtype == np.int16:
+                    audio_waveform = torch.from_numpy(data.astype(np.float32) / 32768.0)
+                elif data.dtype == np.float32:
+                    audio_waveform = torch.from_numpy(data)
+                else:
+                    audio_waveform = torch.from_numpy(data.astype(np.float32))
+                if len(audio_waveform.shape) == 1:
+                    audio_waveform = audio_waveform.unsqueeze(0)
+                else:
+                    audio_waveform = audio_waveform.t()
+            except Exception as _auderr:
+                audio_waveform = None
+
+        frame_index = 0
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -304,8 +453,8 @@ def process_video_for_detection(posture_model, object_model, video_file):
                         class_name = object_result.names[class_id]
                         current_frame_objects.append(class_name)
                         all_detected_objects.add(class_name)
-                        # Check if object is hazardous (assuming model.names contains hazardous classes)
-                        if class_name in object_model.names and class_name in object_model.get_text_pe(object_model.names): # Simplified check
+                        # Check if object is hazardous
+                        if class_name in HAZARDOUS_CLASSES:
                              all_hazardous_objects.add(class_name)
 
                 if object_detections.class_id is not None:
@@ -313,8 +462,39 @@ def process_video_for_detection(posture_model, object_model, video_file):
                     frame = box_annotator.annotate(scene=frame, detections=object_detections)
                     frame = label_annotator.annotate(scene=frame, detections=object_detections, labels=object_labels)
             
-            out.write(frame) # Write to output video
-            yield frame, current_posture, current_frame_objects, current_frame_hazardous_objects # Yield for live display
+            # Real-time cry detection from audio aligned with current frame time
+            is_crying_current = False
+            if audio_waveform is not None and audio_sr == 16000 and fps > 0:
+                current_time = frame_index / max(fps, 1)
+                samples = int(AUDIO_WIN_SEC * audio_sr)
+                end = int(current_time * audio_sr)
+                start = max(0, end - samples)
+                chunk = audio_waveform[:, start:end]
+                if chunk.shape[1] < samples:
+                    pad = torch.zeros((1, samples - chunk.shape[1]), dtype=chunk.dtype)
+                    chunk = torch.cat([pad, chunk], dim=1)
+                try:
+                    mel_spec = MEL(chunk)
+                    mel_spec_db = DB(mel_spec)
+                    mean = mel_spec_db.mean()
+                    std = mel_spec_db.std()
+                    mel_spec_db = (mel_spec_db - mean) / (std + 1e-6)
+                    time_steps = mel_spec_db.shape[2]
+                    if time_steps < 64:
+                        mel_spec_db = F.pad(mel_spec_db, (0, 64 - time_steps))
+                    elif time_steps > 64:
+                        start_t = (time_steps - 64) // 2
+                        mel_spec_db = mel_spec_db[:, :, start_t:start_t+64]
+                    mel_spec_db = mel_spec_db[:, :, :64]
+                    high_freq_energy = mel_spec_db[0, 32:, :].mean().item()
+                    low_freq_energy = mel_spec_db[0, :32, :].mean().item()
+                    is_crying_current = high_freq_energy > low_freq_energy + 0.5
+                except Exception as _cryerr:
+                    is_crying_current = False
+
+            out.write(frame)
+            yield frame, current_posture, current_frame_objects, current_frame_hazardous_objects, is_crying_current
+            frame_index += 1
 
         cap.release()
         out.release() # Release output video writer
@@ -336,4 +516,9 @@ def process_video_for_detection(posture_model, object_model, video_file):
         # Clean up temporary input video file
         if temp_input_video_path and os.path.exists(temp_input_video_path):
             os.remove(temp_input_video_path)
+        if temp_audio_path and os.path.exists(temp_audio_path):
+            try:
+                os.remove(temp_audio_path)
+            except:
+                pass
         # Note: temp_output_video_path will be cleaned up by app.py after display

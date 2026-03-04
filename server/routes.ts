@@ -20,18 +20,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   const wss = new WebSocketServer({ noServer: true });
   
   httpServer.on('upgrade', (request, socket, head) => {
-    if (request.url !== '/ws') {
-       // Allow other upgrades if any? Or just destroy.
-       // For now, if it's not /ws, let it be handled by others or destroy.
-       // Actually vite might use HMR so we should be careful.
-       // If vite handles its own upgrades, we should only intercept /ws.
+    if (request.url !== '/socket') {
        return; 
     }
+
+    const simulatorToken = request.headers['x-simulator-token'];
+    const expectedToken = process.env.SIMULATOR_TOKEN || 'default-simulator-token';
 
     sessionMiddleware(request, {} as any, () => {
       passport.initialize()(request as any, {} as any, () => {
         passport.session()(request as any, {} as any, () => {
            if ((request as any).isAuthenticated()) {
+             wss.handleUpgrade(request, socket, head, (ws) => {
+               wss.emit('connection', ws, request);
+             });
+           } else if (simulatorToken === expectedToken) {
+             (request as any).user = { id: 1, username: 'simulator' };
              wss.handleUpgrade(request, socket, head, (ws) => {
                wss.emit('connection', ws, request);
              });
@@ -566,7 +570,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     return userStates.get(userId)!;
   }
 
-  wss.on('connection', (ws: WebSocket, req: any) => {
+  wss.on('connection', (ws: WebSocket & { isAlive?: boolean }, req: any) => {
     // req.user should be populated by the session middleware in the upgrade handler
     if (!req.user) {
         ws.close();
@@ -574,6 +578,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
     const userId = (req.user as any).id;
     
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     if (!clients.has(userId)) {
       clients.set(userId, new Set());
     }
@@ -583,7 +592,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
     const sendInitialData = async () => {
       try {
-        const sensorData = await storage.getLatestSensorData(userId);
+        let sensorData = await storage.getLatestSensorData(userId);
+        if (sensorData && typeof (sensorData as any).objectDetected === 'string') {
+          try {
+            (sensorData as any).objectDetected = JSON.parse((sensorData as any).objectDetected);
+          } catch {
+            (sensorData as any).objectDetected = [];
+          }
+        }
         const musicStatus = await storage.getLatestMusicStatus(userId);
         const settings = await storage.getSystemSettings(userId);
 
@@ -608,12 +624,34 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       try {
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'sensor_update') {
+          console.log(`[WS] sensor_update received for user ${userId}`);
           const sensorData = parsedMessage.data;
-          // Ensure sensor data is associated with the user
-          await storage.insertSensorData({ ...sensorData, userId });
+          
+          // Optimization: Broadcast immediately to reduce latency
           broadcast(userId, {
             type: 'sensor_update',
             data: sensorData
+          });
+
+          // Ensure sensor data is associated with the user for DB storage
+          const toInsert: any = { ...sensorData, userId };
+          if (toInsert.timestamp !== undefined) delete toInsert.timestamp;
+          if (toInsert.id !== undefined) delete toInsert.id;
+          
+          const toStore: any = { ...toInsert };
+          if (toStore.objectDetected !== undefined && toStore.objectDetected !== null) {
+            if (typeof toStore.objectDetected === 'string') {
+              toStore.objectDetected = JSON.stringify([{ object_name: toStore.objectDetected, timestamp: new Date().toISOString() }]);
+            } else if (Array.isArray(toStore.objectDetected)) {
+              toStore.objectDetected = JSON.stringify(toStore.objectDetected);
+            } else {
+              toStore.objectDetected = null;
+            }
+          }
+
+          // Optimization: DB insert in background to avoid blocking alerts/broadcasts
+          storage.insertSensorData(toStore).catch(err => {
+            console.error('[Storage] Background sensor insert failed:', err.message);
           });
 
           const state = getUserState(userId);
@@ -722,6 +760,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             clearTimeout(state.cryingPlaybackTimeout);
             state.cryingPlaybackTimeout = null;
           }
+        } else if (parsedMessage.type === 'video_frame') {
+          console.log(`[WS] video_frame received for user ${userId}`);
+          // Relay video frame to other clients
+          broadcast(userId, {
+            type: 'video_frame',
+            data: parsedMessage.data
+          });
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -734,6 +779,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         userClients.delete(ws);
         if (userClients.size === 0) {
           clients.delete(userId);
+          // Optimization: Clean up user state when no clients are connected
+          userStates.delete(userId);
+          console.log(`[WS] User state cleaned up for User ID: ${userId}`);
         }
       }
       console.log(`Client disconnected from WebSocket (User ID: ${userId})`);
@@ -769,6 +817,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // --- Simulation Logic ---
 
+  // Map userId to last error time for simulation to avoid log spam
+  const lastSimErrorTime = new Map<number, number>();
+
   // Simulate servo position updates for auto-rock
   setInterval(async () => {
     // Iterate over all connected users (or active users)
@@ -792,9 +843,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             });
           }
         } catch (error) {
-          console.error('Error in servo simulation:', error);
+          const now = Date.now();
+          const lastError = lastSimErrorTime.get(userId) || 0;
+          if (now - lastError > 300000) { // Only log every 5 minutes
+            console.error(`Error in servo simulation (User: ${userId}):`, (error as Error).message);
+            lastSimErrorTime.set(userId, now);
+          }
         }
     }
   }, 1000);
+  // Cleanup dead WebSocket connections
+  const interval = setInterval(() => {
+    wss.clients.forEach((ws: WebSocket & { isAlive?: boolean }) => {
+      if (ws.isAlive === false) {
+        console.log('[WS] Connection dead, terminating');
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', () => {
+    clearInterval(interval);
+  });
+
   return httpServer;
 }
