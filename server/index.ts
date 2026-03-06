@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import fs from "fs";
+import path from "path";
+import dotenv from "dotenv";
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+if (fs.existsSync(path.resolve(process.cwd(), "render.env"))) {
+  dotenv.config({ path: path.resolve(process.cwd(), "render.env") });
+}
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { SensorData, ServoStatus, MusicStatus, SystemSettings } from "@shared/schema";
 
 export interface WebSocketMessage {
@@ -19,6 +19,11 @@ export interface InitialData {
   settings: SystemSettings;
 }
 
+let sharedWs: WebSocket | null = null;
+let sharedUrl: string | null = null;
+let refCount = 0;
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function useWebSocket() {
   const [connected, setConnected] = useState(false);
   const [sensorData, setSensorData] = useState<SensorData | null>(null);
@@ -27,82 +32,102 @@ export function useWebSocket() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [videoFrame, setVideoFrame] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/socket`;
-    
-    const connect = () => {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        console.log('Connected to WebSocket');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          
-          switch (message.type) {
-            case 'initial_data':
-              const data = message.data as InitialData;
-              setSensorData(data.sensors);
-              setServoStatus(data.servo);
-              setMusicStatus(data.music);
-              setSettings(data.settings);
-              break;
-              
-            case 'sensor_update':
-              setSensorData(message.data as SensorData);
-              break;
-              
-            case 'servo_update':
-              setServoStatus(message.data as ServoStatus);
-              break;
-              
-            case 'music_update':
-              setMusicStatus(message.data as MusicStatus);
-              break;
-
-            case 'settings_update':
-              setSettings(message.data as SystemSettings);
-              break;
-              
-            case 'notification':
-              const notification = message.data as NotificationData;
-              setNotifications(prev => [...prev, notification]);
-              break;
-
-            case 'video_frame':
-              setVideoFrame(message.data as string);
-              break;
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        console.log('WebSocket connection closed');
-        // Attempt to reconnect after 3 seconds
-        setTimeout(connect, 3000);
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setConnected(false);
-      };
+    const ensureConnection = () => {
+      if (!sharedWs || sharedWs.readyState === WebSocket.CLOSED || sharedWs.readyState === WebSocket.CLOSING || sharedUrl !== wsUrl) {
+        sharedWs = new WebSocket(wsUrl);
+        sharedUrl = wsUrl;
+      }
     };
 
-    connect();
+    const onOpen = () => {
+      setConnected(true);
+    };
+
+    const onClose = () => {
+      setConnected(false);
+      if (refCount === 0) {
+        if (sharedWs && (sharedWs.readyState === WebSocket.CLOSING || sharedWs.readyState === WebSocket.CLOSED)) {
+          sharedWs = null;
+          sharedUrl = null;
+        }
+      }
+    };
+
+    const onError = () => {
+      setConnected(false);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        switch (message.type) {
+          case 'initial_data': {
+            const data = message.data as InitialData;
+            setSensorData(data.sensors);
+            setServoStatus(data.servo);
+            setMusicStatus(data.music);
+            setSettings(data.settings);
+            break;
+          }
+          case 'sensor_update':
+            setSensorData(message.data as SensorData);
+            break;
+          case 'servo_update':
+            setServoStatus(message.data as ServoStatus);
+            break;
+          case 'music_update':
+            setMusicStatus(message.data as MusicStatus);
+            break;
+          case 'settings_update':
+            setSettings(message.data as SystemSettings);
+            break;
+          case 'notification': {
+            const notification = message.data as NotificationData;
+            setNotifications(prev => [...prev, notification]);
+            break;
+          }
+          case 'video_frame':
+            setVideoFrame(message.data as string);
+            break;
+        }
+      } catch {
+      }
+    };
+
+    ensureConnection();
+    refCount += 1;
+    // Cancel pending close if any
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    const ws = sharedWs!;
+    ws.addEventListener('open', onOpen);
+    ws.addEventListener('close', onClose);
+    ws.addEventListener('error', onError as any);
+    ws.addEventListener('message', onMessage as any);
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (!sharedWs) return;
+      sharedWs.removeEventListener('open', onOpen);
+      sharedWs.removeEventListener('close', onClose);
+      sharedWs.removeEventListener('error', onError as any);
+      sharedWs.removeEventListener('message', onMessage as any);
+      refCount = Math.max(0, refCount - 1);
+      if (refCount === 0 && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+        // Grace period before closing to avoid rapid connect/disconnect during route changes
+        closeTimer = setTimeout(() => {
+          if (refCount === 0 && sharedWs) {
+            sharedWs.close();
+            sharedWs = null;
+            sharedUrl = null;
+          }
+          closeTimer = null;
+        }, 3000);
       }
     };
   }, []);

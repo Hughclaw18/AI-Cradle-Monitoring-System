@@ -2,15 +2,14 @@ import * as SpotifyApiModule from "@spotify/web-api-ts-sdk";
 import { URLSearchParams } from "url";
 import { storage } from "./storage";
 
-const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "1f7a6b45727b4d8a805a8a4fa6bee9bb";
-const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "4abd461cb39f4a999ec5831f1d247fb6";
-
-// Dynamic Redirect URI based on environment
-const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || 
-  "https://smartcradlemonitor.onrender.com/api/spotify/callback";
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || "";
+const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "";
+const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || "";
 
 export function getSpotifyAuthUrl() {
-  console.log(`[Spotify] Generating Auth URL with Redirect URI: ${REDIRECT_URI}`);
+  if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+    throw new Error("Spotify environment is not configured");
+  }
   const scope = "user-read-private user-read-email playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state user-read-currently-playing";
   const params = new URLSearchParams({
     response_type: "code",
@@ -22,6 +21,9 @@ export function getSpotifyAuthUrl() {
 }
 
 export async function exchangeCodeForTokens(code: string) {
+  if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+    throw new Error("Spotify environment is not configured");
+  }
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -40,20 +42,20 @@ export async function exchangeCodeForTokens(code: string) {
 
   const data = await response.json();
   if (response.ok) {
-    console.log("Spotify Token Exchange Successful");
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       expiresIn: data.expires_in,
     };
   } else {
-    console.error("Error exchanging code for tokens:", data);
     return null;
   }
 }
 
 async function refreshAccessToken(refreshToken: string) {
-  console.log("Attempting to refresh Spotify access token...");
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    return null;
+  }
   const params = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
@@ -74,10 +76,9 @@ async function refreshAccessToken(refreshToken: string) {
     return {
       accessToken: data.access_token,
       expiresIn: data.expires_in,
-      refreshToken: data.refresh_token, // Sometimes we get a new refresh token
+      refreshToken: data.refresh_token,
     };
   } else {
-    console.error("Error refreshing access token:", data);
     return null;
   }
 }
@@ -129,7 +130,6 @@ export async function getCurrentlyPlayingTrack(userId: number) {
   try {
     const spotify = await getUncachableSpotifyClient(userId);
     const currentPlayback = await spotify.player.getCurrentlyPlayingTrack();
-    console.log("Spotify API - Currently Playing Track:", currentPlayback);
     if (currentPlayback && currentPlayback.item && currentPlayback.item.type === "track") {
       const track = currentPlayback.item as SpotifyApiModule.Track;
       return {

@@ -396,6 +396,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
+  // Disconnect Spotify: remove stored tokens and mark status disconnected
+  app.post("/api/spotify/disconnect", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    try {
+      await storage.deleteSpotifyConfig(userId);
+      const status = await storage.updateMusicStatus(userId, {
+        spotifyConnected: false,
+        currentTrack: null,
+        currentTrackArtist: null,
+        currentTrackAlbum: null,
+        currentTrackImageUrl: null,
+        isPlaying: false,
+        useSpotify: false,
+        spotifyPlaylistId: null,
+        spotifyPlaylistName: null,
+      });
+      broadcastMusicStatus(userId, status);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to disconnect Spotify", message: err.message });
+    }
+  });
+
   // Set active Spotify playlist
   app.post("/api/spotify/playlist", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
