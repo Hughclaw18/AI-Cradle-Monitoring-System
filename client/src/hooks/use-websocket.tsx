@@ -22,7 +22,6 @@ export interface InitialData {
 let sharedWs: WebSocket | null = null;
 let sharedUrl: string | null = null;
 let refCount = 0;
-let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function useWebSocket() {
   const [connected, setConnected] = useState(false);
@@ -49,11 +48,20 @@ export function useWebSocket() {
 
     const onClose = () => {
       setConnected(false);
-      if (refCount === 0) {
-        if (sharedWs && (sharedWs.readyState === WebSocket.CLOSING || sharedWs.readyState === WebSocket.CLOSED)) {
-          sharedWs = null;
-          sharedUrl = null;
-        }
+      // Auto-reconnect if there are active consumers
+      if (refCount > 0) {
+        setTimeout(() => {
+          if (refCount > 0) {
+            ensureConnection();
+            if (sharedWs) {
+              const ws2 = sharedWs;
+              ws2.addEventListener('open', onOpen);
+              ws2.addEventListener('close', onClose);
+              ws2.addEventListener('error', onError as any);
+              ws2.addEventListener('message', onMessage as any);
+            }
+          }
+        }, 3000);
       }
     };
 
@@ -100,16 +108,22 @@ export function useWebSocket() {
 
     ensureConnection();
     refCount += 1;
-    // Cancel pending close if any
-    if (closeTimer) {
-      clearTimeout(closeTimer);
-      closeTimer = null;
-    }
     const ws = sharedWs!;
     ws.addEventListener('open', onOpen);
     ws.addEventListener('close', onClose);
     ws.addEventListener('error', onError as any);
     ws.addEventListener('message', onMessage as any);
+
+    const beforeUnload = () => {
+      if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+        try {
+          sharedWs.close();
+        } catch {}
+        sharedWs = null;
+        sharedUrl = null;
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
 
     return () => {
       if (!sharedWs) return;
@@ -117,18 +131,9 @@ export function useWebSocket() {
       sharedWs.removeEventListener('close', onClose);
       sharedWs.removeEventListener('error', onError as any);
       sharedWs.removeEventListener('message', onMessage as any);
+      window.removeEventListener('beforeunload', beforeUnload);
       refCount = Math.max(0, refCount - 1);
-      if (refCount === 0 && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
-        // Grace period before closing to avoid rapid connect/disconnect during route changes
-        closeTimer = setTimeout(() => {
-          if (refCount === 0 && sharedWs) {
-            sharedWs.close();
-            sharedWs = null;
-            sharedUrl = null;
-          }
-          closeTimer = null;
-        }, 3000);
-      }
+      // Do not auto-close here; keep connection for app lifetime
     };
   }, []);
 
