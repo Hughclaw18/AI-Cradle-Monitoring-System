@@ -163,7 +163,7 @@ export function SpotifyConnect() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{playlist.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {playlist.tracks.total} tracks
+                        {(playlist.tracks?.total ?? 0)} tracks
                       </p>
                     </div>
                     {selectedPlaylist === playlist.id && (
