@@ -849,7 +849,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code: number, reason: Buffer) => {
       const userClients = clients.get(userId);
       if (userClients) {
         userClients.delete(ws);
@@ -860,11 +860,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           console.log(`[WS] User state cleaned up for User ID: ${userId}`);
         }
       }
-      console.log(`Client disconnected from WebSocket (User ID: ${userId})`);
+      const reasonText = (() => {
+        try {
+          return reason?.toString() || '';
+        } catch {
+          return '';
+        }
+      })();
+      console.log(`Client disconnected from WebSocket (User ID: ${userId}) code=${code} reason="${reasonText}"`);
     });
 
     ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      console.error(`[WS] error for user ${userId}:`, error);
       const userClients = clients.get(userId);
       if (userClients) {
         userClients.delete(ws);

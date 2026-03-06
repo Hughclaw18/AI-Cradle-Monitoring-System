@@ -41,12 +41,20 @@ if 'cookies' not in st.session_state:
     st.session_state.cookies = None
 if 'username' not in st.session_state:
     st.session_state.username = None
+if 'backend_base' not in st.session_state:
+    st.session_state.backend_base = os.getenv("BACKEND_BASE_URL", "https://ai-cradle-monitoring-system.onrender.com").rstrip("/")
+if 'sim_token' not in st.session_state:
+    st.session_state.sim_token = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 # Title
 st.title("👶 Baby Posture and Object Detection")
 
 # Authentication Sidebar
 with st.sidebar:
+    st.header("Backend")
+    st.session_state.backend_base = st.text_input("Backend Base URL", value=st.session_state.backend_base)
+    st.session_state.sim_token = st.text_input("Simulator Token", value=st.session_state.sim_token, type="password")
+    st.divider()
     st.header("Authentication")
     if not st.session_state.cookies:
         st.subheader("Login")
@@ -108,6 +116,12 @@ with st.sidebar:
 
 # Title
 st.title("👶 Baby Posture and Object Detection")
+
+# Apply backend settings
+BACKEND_BASE_URL = st.session_state.backend_base.rstrip("/")
+SIMULATOR_TOKEN = st.session_state.sim_token
+API_URL = f"{BACKEND_BASE_URL}/api"
+WEBSOCKET_URL = explicit_ws or derive_ws_url(BACKEND_BASE_URL)
 
 # --- Model Initialization (Cached) ---
 @st.cache_resource
@@ -224,6 +238,7 @@ with col_ws2:
         else:
             st.warning("Not connected to WebSocket.")
 
+st.caption(f"API: {API_URL} | WS: {WEBSOCKET_URL}")
 
 st.header("Sensor Data Simulator")
 
