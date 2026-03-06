@@ -33,7 +33,7 @@ export function SpotifyPlayer({ musicStatus }: SpotifyPlayerProps) {
   volume_percent: number;
 }
 
-const { data: devices } = useQuery<UserDevice[]>({
+const { data: devices, refetch: refetchDevices, isFetching: devicesLoading } = useQuery<UserDevice[]>({
     queryKey: ["spotifyDevices"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/spotify/devices");
@@ -285,22 +285,32 @@ const { data: devices } = useQuery<UserDevice[]>({
         </div>
         
         {/* Device Selection */}
-        {/* FIX: Used optional chaining `?.` to prevent crash if musicStatus is undefined */}
-        {musicStatus?.spotifyConnected && devices && devices.length > 0 && (
-          <div className="flex flex-col items-center space-y-2 pt-4">
-            <label className="text-sm font-medium text-muted-foreground">Playback Device</label>
-            <Select onValueChange={setSelectedDeviceId} value={selectedDeviceId}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select device" />
-              </SelectTrigger>
-              <SelectContent>
-                {devices.map((device: UserDevice) => (
-                  <SelectItem key={device.id} value={device.id}>
-                    {device.name} ({device.type})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {musicStatus?.spotifyConnected && (
+          <div className="flex flex-col items-center space-y-2 pt-4 w-full">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-muted-foreground">Playback Device</label>
+              <Button variant="outline" size="sm" onClick={() => refetchDevices()} disabled={devicesLoading}>
+                {devicesLoading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+            {devices && devices.length > 0 ? (
+              <Select onValueChange={setSelectedDeviceId} value={selectedDeviceId}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select device" />
+                </SelectTrigger>
+                <SelectContent>
+                  {devices.map((device: UserDevice) => (
+                    <SelectItem key={device.id} value={device.id}>
+                      {device.name} ({device.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="text-xs text-muted-foreground text-center">
+                No devices found. Open Spotify on a device and click Refresh.
+              </div>
+            )}
           </div>
         )}
 
