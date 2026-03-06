@@ -689,6 +689,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     sendInitialData();
 
     ws.on('message', async (message: string) => {
+      // Treat any incoming message as a keep-alive signal, in case some clients don't auto-pong (e.g., simple Python clients)
+      ws.isAlive = true;
       try {
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'sensor_update') {
