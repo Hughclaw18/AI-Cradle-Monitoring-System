@@ -5,7 +5,8 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User } from "@shared/schema";
+import { User, insertUserSchema } from "@shared/schema";
+import { normalizePhoneE164 } from "./notifications";
 
 const scryptAsync = promisify(scrypt);
 
@@ -75,9 +76,15 @@ export function setupAuth(app: Express) {
         return res.status(400).send("Username already exists");
       }
 
-      const hashedPassword = await hashPassword(req.body.password);
+      const parsed = insertUserSchema.parse(req.body);
+      const normalizedPhone = normalizePhoneE164(parsed.phone);
+      if (!normalizedPhone) {
+        return res.status(400).send("Invalid phone number format");
+      }
+      const hashedPassword = await hashPassword(parsed.password);
       const user = await storage.createUser({
-        ...req.body,
+        ...parsed,
+        phone: normalizedPhone,
         password: hashedPassword,
       });
 

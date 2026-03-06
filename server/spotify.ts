@@ -7,9 +7,7 @@ const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || "4abd461cb39f4a999ec5
 
 // Dynamic Redirect URI based on environment
 const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || 
-  (process.env.NODE_ENV === "production" 
-    ? "https://smartcradlemonitor.onrender.com/api/spotify/callback"
-    : "http://127.0.0.1:5000/api/spotify/callback");
+  "https://smartcradlemonitor.onrender.com/api/spotify/callback";
 
 export function getSpotifyAuthUrl() {
   console.log(`[Spotify] Generating Auth URL with Redirect URI: ${REDIRECT_URI}`);

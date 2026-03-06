@@ -10,6 +10,7 @@ import { sessionMiddleware } from "./auth";
 import passport from "passport";
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
+import { notifyUserBySms, getSmsConfigStatus } from "./notifications";
 
 if (ffmpegPath) {
   ffmpeg.setFfmpegPath(ffmpegPath);
@@ -158,6 +159,47 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json(data);
     } catch (error) {
       res.status(500).json({ error: "Failed to get sensor data" });
+    }
+  });
+
+  // --- Notification Diagnostics & Test ---
+  app.get("/api/notifications/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    try {
+      const user = await storage.getUser(userId);
+      const settings = await storage.getSystemSettings(userId);
+      const smsStatus = getSmsConfigStatus();
+      res.json({
+        sms: smsStatus,
+        targetPhone: user?.phone ?? null,
+        pushNotifications: settings?.pushNotifications ?? true,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to get notification status", message: err.message });
+    }
+  });
+
+  app.post("/api/notifications/test-sms", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    try {
+      const user = await storage.getUser(userId);
+      if (!user?.phone) {
+        return res.status(400).json({ error: "No phone on user profile" });
+      }
+      const settings = await storage.getSystemSettings(userId);
+      if (settings && !settings.pushNotifications) {
+        return res.status(400).json({ error: "pushNotifications disabled in settings" });
+      }
+      const status = getSmsConfigStatus();
+      if (!status.configured) {
+        return res.status(400).json({ error: "Twilio not fully configured", details: status });
+      }
+      await notifyUserBySms(userId, "Test SMS", "This is a Smart Cradle test message.");
+      res.json({ ok: true, sentTo: user.phone });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to send test SMS", message: err.message });
     }
   });
 
@@ -552,6 +594,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     lastCryingAlertTime: number;
     lastObjectAlertTime: number;
     lastTempAlertTime: number;
+    lastCombinedSmsTime: number;
     cryingPlaybackActive: boolean;
     cryingPlaybackTimeout: NodeJS.Timeout | null;
   }
@@ -563,6 +606,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         lastCryingAlertTime: 0,
         lastObjectAlertTime: 0,
         lastTempAlertTime: 0,
+        lastCombinedSmsTime: 0,
         cryingPlaybackActive: false,
         cryingPlaybackTimeout: null,
       });
@@ -659,41 +703,49 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           const settings = await storage.getSystemSettings(userId);
 
           // Check for alerts
-          if (settings && sensorData.temperature > (settings.tempThreshold || 78) && (currentTime - state.lastTempAlertTime > 60 * 1000)) { // 1 minute delay
-            broadcast(userId, {
-              type: 'notification',
-              data: {
-                title: 'High Temperature Alert!',
-                message: `Temperature is ${sensorData.temperature}°F`,
-                severity: 'warning'
-              }
-            });
+        const smsParts: string[] = [];
+          if (settings && sensorData.temperature > (settings.tempThreshold || 78) && (currentTime - state.lastTempAlertTime > 60 * 1000)) {
+            const notif = {
+              title: 'High Temperature Alert!',
+              message: `Temperature is ${sensorData.temperature}°F`,
+              severity: 'warning' as const
+            };
+            broadcast(userId, { type: 'notification', data: notif });
+          smsParts.push(`High temperature ${sensorData.temperature}°F`);
             state.lastTempAlertTime = currentTime;
           }
 
-          if (settings && sensorData.objectDetected && sensorData.objectDetected.length > 0 && (currentTime - state.lastObjectAlertTime > 30 * 1000)) { // 30 seconds delay
-            broadcast(userId, {
-              type: 'notification',
-              data: {
-                title: 'Object Detected!',
-                message: 'An object has been detected in the crib.',
-                severity: 'info'
-              }
-            });
+          if (settings && sensorData.objectDetected && sensorData.objectDetected.length > 0 && (currentTime - state.lastObjectAlertTime > 30 * 1000)) {
+            const notif = {
+              title: 'Object Detected!',
+              message: 'An object has been detected in the crib.',
+              severity: 'info' as const
+            };
+            broadcast(userId, { type: 'notification', data: notif });
+          smsParts.push('Object detected in the crib');
             state.lastObjectAlertTime = currentTime;
           }
 
           if (settings && sensorData.cryingDetected && (currentTime - state.lastCryingAlertTime > 30 * 1000)) {
-            broadcast(userId, {
-              type: 'notification',
-              data: {
-                title: 'Crying Detected!',
-                message: 'Baby is crying!',
-                severity: 'warning'
-              }
-            });
+            const notif = {
+              title: 'Crying Detected!',
+              message: 'Baby is crying!',
+              severity: 'warning' as const
+            };
+            broadcast(userId, { type: 'notification', data: notif });
+          smsParts.push('Crying detected');
             state.lastCryingAlertTime = currentTime;
           }
+
+        // Send a single combined SMS if any alerts occurred
+        if (settings?.pushNotifications && smsParts.length > 0) {
+          const COMBINED_SMS_COOLDOWN_MS = 30 * 1000;
+          if (currentTime - state.lastCombinedSmsTime > COMBINED_SMS_COOLDOWN_MS) {
+            const combined = smsParts.join('; ');
+            notifyUserBySms(userId, 'Smart Cradle Alerts', combined);
+            state.lastCombinedSmsTime = currentTime;
+          }
+        }
 
           // Auto-rocking based on crying
           if (sensorData.cryingDetected && settings?.autoResponse) {
@@ -862,7 +914,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       ws.isAlive = false;
       ws.ping();
     });
-  }, 30000);
+  }, 50000); // Increased interval for slower simulator analysis
 
   wss.on('close', () => {
     clearInterval(interval);

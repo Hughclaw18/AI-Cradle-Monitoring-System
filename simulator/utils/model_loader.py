@@ -3,6 +3,8 @@ import streamlit as st
 import os
 from ultralytics import YOLO, YOLOE # Import YOLO for best.pt, YOLOE for object detection
 from .audio_model import CryCNN, get_model # Import our custom audio model
+import tensorflow as tf
+import csv
 
 # Define absolute paths for models
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -89,6 +91,48 @@ def load_object_detection_model(model_path=DEFAULT_OBJECT_MODEL):
         except Exception as fallback_e:
             st.error(f"Error loading fallback model: {fallback_e}")
             return None
+
+@st.cache_resource
+def load_yamnet_model(model_path=MODELS_DIR):
+    """
+    Loads the YAMNet model from the local models directory.
+    Args:
+        model_path (str): Path to the SavedModel directory.
+    Returns:
+        tuple: (model, class_names)
+    """
+    try:
+        if not os.path.exists(model_path):
+            st.error(f"Error: Model path '{model_path}' not found.")
+            return None, []
+            
+        model = tf.saved_model.load(model_path)
+        
+        # Load class names
+        class_names = []
+        try:
+            class_map_path = model.class_map_path().numpy()
+            with tf.io.gfile.GFile(class_map_path) as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    class_names.append(row['display_name'])
+        except Exception:
+            # Fallback to local csv if it exists
+            fallback_path = os.path.join(model_path, "yamnet_class_map.csv")
+            if os.path.exists(fallback_path):
+                with open(fallback_path, 'r') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        class_names.append(row['display_name'])
+            else:
+                # Default minimal list
+                class_names = ["Baby cry, infant cry"] * 521 
+        
+        st.info("YAMNet model loaded successfully.")
+        return model, class_names
+    except Exception as e:
+        st.error(f"Error loading YAMNet model: {e}")
+        return None, []
 
 @st.cache_resource
 def load_cry_detection_model(model_path=DEFAULT_CRY_MODEL):

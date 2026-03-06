@@ -195,12 +195,16 @@ def predict_object(model, image_file):
         except OSError:
             pass # Directory might not be empty if multiple files were uploaded or other issues
 
-def predict_cry(model, audio_file):
+import tensorflow as tf
+
+def predict_cry(model, audio_file, class_names=None):
     """
-    Runs cry detection inference on an audio file using Mel spectrogram analysis.
+    Runs cry detection inference on an audio file. Supports both CryCNN (PyTorch) 
+    and YAMNet (TensorFlow).
     Args:
-        model: Loaded CryCNN model.
+        model: Loaded model (PyTorch or TensorFlow).
         audio_file: Uploaded audio file from Streamlit.
+        class_names: List of class names for YAMNet.
     Returns:
         dict: Detection results.
     """
@@ -239,7 +243,38 @@ def predict_cry(model, audio_file):
         # Convert to mono if multi-channel
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
+        
+        # --- YAMNet (TensorFlow) Inference ---
+        if hasattr(model, 'signatures') or (isinstance(model, tf.Module) if 'tf' in globals() else False):
+            # YAMNet expects a flat float32 tensor
+            waveform_np = waveform.squeeze().numpy()
+            waveform_np = waveform_np / (np.max(np.abs(waveform_np)) + 1e-9)
             
+            scores, embeddings, spectrogram = model(waveform_np)
+            
+            # Find "Baby cry, infant cry" index
+            cry_idx = 14 # Default index in YAMNet
+            if class_names and "Baby cry, infant cry" in class_names:
+                cry_idx = class_names.index("Baby cry, infant cry")
+            
+            scores_np = scores.numpy()
+            mean_scores = scores_np.mean(axis=0)
+            baby_conf = float(mean_scores[cry_idx])
+            top_idx = mean_scores.argmax()
+            top_class = class_names[top_idx] if class_names else "Unknown"
+            top_conf = float(mean_scores[top_idx])
+            
+            is_crying = baby_conf >= 0.3 # Use same threshold as in yamnet.py
+            
+            result_text = "Crying Detected!" if is_crying else "No Crying Detected."
+            
+            return {
+                "is_crying": is_crying,
+                "confidence": baby_conf,
+                "message": f"{result_text} (Conf: {baby_conf:.2f}, Top: {top_class} {top_conf:.2f})"
+            }
+
+        # --- CryCNN (PyTorch) Mel Spectrogram Inference ---
         # Define Mel Spectrogram transform
         n_mels = 64
         mel_spectrogram_transform = T.MelSpectrogram(

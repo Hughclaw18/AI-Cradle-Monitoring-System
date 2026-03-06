@@ -22,7 +22,8 @@ from utils.inference import (
 
 st.set_page_config(page_title="Baby Posture, Object Detection & Sensor Simulator", layout="wide")
 
-WEBSOCKET_URL = "ws://127.0.0.1:5000/ws"
+WEBSOCKET_URL = os.getenv("WEBSOCKET_URL", "ws://localhost:5000/socket")
+SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 st.title("👶 Baby Posture/Object Detection & Sensor Simulator")
 
@@ -34,7 +35,26 @@ posture_model = load_posture_detection_model()
 object_model = load_object_detection_model()
 
 
+# Function to reconnect to WebSocket if disconnected
+def ensure_ws_connection():
+    if st.session_state.ws is None or not st.session_state.ws.connected:
+        try:
+            headers = {"x-simulator-token": SIMULATOR_TOKEN}
+            st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, header=headers)
+            return True
+        except Exception as e:
+            st.error(f"Failed to auto-reconnect to WebSocket: {e}")
+            return False
+    return True
+
 def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
+    # Try to ensure connection before sending
+    if not ensure_ws_connection():
+        return
+
+    # Use the potentially re-established socket from session state
+    current_ws = st.session_state.ws
+
     try:
         sensor_data = {
             "id": 1,
@@ -52,8 +72,21 @@ def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
             "data": sensor_data,
         }
 
-        ws.send(json.dumps(message))
+        current_ws.send(json.dumps(message))
         st.success(f"Sent sensor data: {json.dumps(sensor_data)}")
+    except (ConnectionResetError, websocket.WebSocketConnectionClosedException, OSError) as e:
+        # One last attempt to reconnect and resend if it just closed
+        st.warning(f"Connection lost during send, attempting one-time retry...")
+        if ensure_ws_connection():
+            try:
+                st.session_state.ws.send(json.dumps(message))
+                st.success("Successfully resent sensor data after reconnect.")
+                return
+            except Exception as retry_e:
+                st.error(f"Retry failed: {retry_e}")
+        
+        st.error(f"Connection lost: {e}")
+        st.session_state.ws = None
     except Exception as e:
         st.error(f"Error sending data: {e}")
 
@@ -73,7 +106,8 @@ with col_ws1:
             st.warning("Already connected to WebSocket.")
         else:
             try:
-                st.session_state.ws = websocket.create_connection(WEBSOCKET_URL)
+                headers = {"x-simulator-token": SIMULATOR_TOKEN}
+                st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, header=headers)
                 st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
             except Exception as e:
                 st.error(f"Failed to connect to WebSocket: {e}")
@@ -161,27 +195,24 @@ if file_type == "Image":
 
             st.success("Image analysis complete!")
 
-            if st.session_state.ws and st.session_state.ws.connected:
-                temperature = 75.0
-                crying_detected = False
+            temperature = 75.0
+            crying_detected = False
 
-                object_status_message = ""
-                if object_results["hazardous_objects"]:
-                    object_status_message = (
-                        "DANGER: Hazardous objects detected: "
-                        + ", ".join(object_results["hazardous_objects"])
-                    )
-                else:
-                    object_status_message = "SAFE: No hazardous objects detected."
-
-                send_sensor_data(
-                    st.session_state.ws,
-                    temperature,
-                    crying_detected,
-                    [object_status_message],
+            object_status_message = ""
+            if object_results["hazardous_objects"]:
+                object_status_message = (
+                    "DANGER: Hazardous objects detected: "
+                    + ", ".join(object_results["hazardous_objects"])
                 )
             else:
-                st.warning("Connect to WebSocket to send sensor data.")
+                object_status_message = "SAFE: No hazardous objects detected."
+
+            send_sensor_data(
+                st.session_state.ws,
+                temperature,
+                crying_detected,
+                [object_status_message],
+            )
 
 elif file_type == "Video":
     uploaded_file = st.file_uploader(
@@ -267,42 +298,41 @@ elif file_type == "Video":
                         posture_summary_overall = current_posture
 
                     st.session_state.frame_counter += 1
-                    if st.session_state.ws and st.session_state.ws.connected:
-                        should_send = False
+                    should_send = False
+                    if current_frame_hazardous_objects:
+                        should_send = True
+                    elif (
+                        st.session_state.frame_counter % SEND_INTERVAL_FRAMES
+                        == 0
+                    ):
+                        should_send = True
+
+                    if should_send:
+                        temperature = round(
+                            np.random.uniform(70.0, 85.0), 2
+                        )
+                        crying_detected = bool(
+                            np.random.choice([True, False])
+                        )
+
+                        object_status_message = ""
                         if current_frame_hazardous_objects:
-                            should_send = True
-                        elif (
-                            st.session_state.frame_counter % SEND_INTERVAL_FRAMES
-                            == 0
-                        ):
-                            should_send = True
-
-                        if should_send:
-                            temperature = round(
-                                np.random.uniform(70.0, 85.0), 2
+                            object_status_message = (
+                                "DANGER: Hazardous objects detected: "
+                                + ", ".join(current_frame_hazardous_objects)
                             )
-                            crying_detected = bool(
-                                np.random.choice([True, False])
+                        else:
+                            object_status_message = (
+                                "SAFE: No hazardous objects detected."
                             )
 
-                            object_status_message = ""
-                            if current_frame_hazardous_objects:
-                                object_status_message = (
-                                    "DANGER: Hazardous objects detected: "
-                                    + ", ".join(current_frame_hazardous_objects)
-                                )
-                            else:
-                                object_status_message = (
-                                    "SAFE: No hazardous objects detected."
-                                )
-
-                            send_sensor_data(
-                                st.session_state.ws,
-                                temperature,
-                                crying_detected,
-                                [object_status_message],
-                            )
-                            st.session_state.frame_counter = 0
+                        send_sensor_data(
+                            st.session_state.ws,
+                            temperature,
+                            crying_detected,
+                            [object_status_message],
+                        )
+                        st.session_state.frame_counter = 0
 
             if final_video_path:
                 st.subheader("Processed Video (Full)")

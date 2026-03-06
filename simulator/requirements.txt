@@ -10,3 +10,8 @@ supervision
 websocket-client
 requests
 torchcodec
+tensorflow
+librosa
+soundfile
+matplotlib
+scipy

@@ -3,9 +3,10 @@ import websocket
 import json
 import time
 import random
+import os
 
-# Define the WebSocket server URL
-WEBSOCKET_URL = "ws://127.0.0.1:5000/ws"
+WEBSOCKET_URL = os.getenv("WEBSOCKET_URL", "ws://localhost:5000/socket")
+SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 st.title("Streamlit Sensor Data Sender")
 
@@ -39,7 +40,8 @@ if st.button("Connect to WebSocket"):
         st.warning("Already connected to WebSocket.")
     else:
         try:
-            st.session_state.ws = websocket.create_connection(WEBSOCKET_URL)
+            headers = {"x-simulator-token": SIMULATOR_TOKEN}
+            st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, header=headers)
             st.success(f"Connected to WebSocket at {WEBSOCKET_URL}")
         except Exception as e:
             st.error(f"Failed to connect to WebSocket: {e}")

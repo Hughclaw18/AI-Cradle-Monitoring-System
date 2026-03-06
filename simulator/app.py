@@ -8,15 +8,15 @@ import time
 import requests
 import cv2
 import base64
-from utils.model_loader import load_cry_detection_model, load_object_detection_model, load_posture_detection_model
+from utils.model_loader import load_cry_detection_model, load_object_detection_model, load_posture_detection_model, load_yamnet_model
 from utils.inference import predict_cry, predict_object, process_video_for_detection, predict_posture
 
 # Set page config
 st.set_page_config(page_title="Baby Posture Detection", layout="wide")
 
 # Define the WebSocket server URL and API URL
-WEBSOCKET_URL = "ws://127.0.0.1:5000/socket"
-API_URL = "http://127.0.0.1:5000/api"
+WEBSOCKET_URL = "ws://localhost:5000/socket"
+API_URL = "http://localhost:5000/api"
 SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 from config import WIDTH, HEIGHT, SEND_INTERVAL_FRAMES
 def get_base64_frame(frame):
@@ -107,17 +107,40 @@ def get_object_model():
 
 @st.cache_resource
 def get_cry_model():
-    return load_cry_detection_model()
+    return load_yamnet_model()
 
 posture_model = get_posture_model()
 object_model = get_object_model()
-cry_model = get_cry_model()
+cry_model, class_names = get_cry_model()
 
 st.header("Image and Video Analysis (Posture & Object Detection)")
 st.write("Upload an image or video to detect the baby's posture and objects around the baby simultaneously.")
 
+# Function to reconnect to WebSocket if disconnected
+def ensure_ws_connection():
+    if st.session_state.ws is None or not st.session_state.ws.connected:
+        try:
+            if st.session_state.cookies:
+                cookie_string = "; ".join([f"{k}={v}" for k, v in st.session_state.cookies.get_dict().items()])
+                st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, cookie=cookie_string)
+            else:
+                headers = {"x-simulator-token": SIMULATOR_TOKEN}
+                st.session_state.ws = websocket.create_connection(WEBSOCKET_URL, header=headers)
+            return True
+        except Exception as e:
+            st.error(f"Failed to auto-reconnect to WebSocket: {e}")
+            return False
+    return True
+
 # Function to send sensor data
 def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
+    # Try to ensure connection before sending
+    if not ensure_ws_connection():
+        return
+
+    # Use the potentially re-established socket from session state
+    current_ws = st.session_state.ws
+    
     try:
         sensor_data = {
             "sensor_id": st.session_state.username or "anonymous",
@@ -133,16 +156,20 @@ def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
             "data": sensor_data
         }
 
-        ws.send(json.dumps(message))
+        current_ws.send(json.dumps(message))
         st.success(f"Sent sensor data: {json.dumps(sensor_data)}")
     except (ConnectionResetError, websocket.WebSocketConnectionClosedException, OSError) as e:
-        st.error(f"Connection lost: {e}")
-        # Reset connection state
-        if st.session_state.ws:
+        # One last attempt to reconnect and resend if it just closed
+        st.warning(f"Connection lost during send, attempting one-time retry...")
+        if ensure_ws_connection():
             try:
-                st.session_state.ws.close()
-            except:
-                pass
+                st.session_state.ws.send(json.dumps(message))
+                st.success("Successfully resent sensor data after reconnect.")
+                return
+            except Exception as retry_e:
+                st.error(f"Retry failed: {retry_e}")
+        
+        st.error(f"Connection lost: {e}")
         st.session_state.ws = None
     except Exception as e:
         st.error(f"Error sending data: {e}")
@@ -259,7 +286,7 @@ if file_type == "Audio":
         st.write("Performing cry detection analysis...")
         
         # Perform cry detection inference
-        cry_results = predict_cry(cry_model, uploaded_file)
+        cry_results = predict_cry(cry_model, uploaded_file, class_names=class_names)
         
         if "error" in cry_results:
             st.error(f"Cry Detection Error: {cry_results['error']}")
@@ -280,13 +307,10 @@ if file_type == "Audio":
                 st.success(f"✅ {message}")
                 
             # Send sensor data via WebSocket
-            if st.session_state.ws and st.session_state.ws.connected:
-                temperature = 75.0 # Default
-                # In app.py, object_detected_list should be strings
-                send_sensor_data(st.session_state.ws, temperature, is_crying, [])
-                st.info("Cry detection status sent to dashboard.")
-            else:
-                st.warning("Connect to WebSocket to send sensor data.")
+            temperature = 75.0 # Default
+            # In app.py, object_detected_list should be strings
+            send_sensor_data(st.session_state.ws, temperature, is_crying, [])
+            st.info("Cry detection status sent to dashboard.")
 
 elif file_type == "Image":
     uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
@@ -336,21 +360,18 @@ elif file_type == "Image":
                 st.success("Image analysis complete!")
 
                 # Prepare and send sensor data via WebSocket (for images, send immediately if connected)
-                if st.session_state.ws and st.session_state.ws.connected:
-                    temperature = 75.0 # Default temperature for image analysis
-                    crying_detected = False # Assuming no crying detection from image for now
-                    
-                    # Determine object status message
-                    object_status_message = ""
-                    if object_results["hazardous_objects"]:
-                        object_status_message = f"DANGER: Hazardous objects detected: {', '.join(object_results['hazardous_objects'])}"
-                    else:
-                        object_status_message = "SAFE: No hazardous objects detected."
-
-                    # Send only the object status message in the objectDetected list
-                    send_sensor_data(st.session_state.ws, temperature, crying_detected, [object_status_message])
+                temperature = 75.0 # Default temperature for image analysis
+                crying_detected = False # Assuming no crying detection from image for now
+                
+                # Determine object status message
+                object_status_message = ""
+                if object_results["hazardous_objects"]:
+                    object_status_message = f"DANGER: Hazardous objects detected: {', '.join(object_results['hazardous_objects'])}"
                 else:
-                    st.warning("Connect to WebSocket to send sensor data.")
+                    object_status_message = "SAFE: No hazardous objects detected."
+
+                # Send only the object status message in the objectDetected list
+                send_sensor_data(st.session_state.ws, temperature, crying_detected, [object_status_message])
 
 elif file_type == "Video":
     uploaded_file = st.file_uploader("Upload a video...", type=["mp4", "avi", "mov"])
@@ -396,7 +417,8 @@ elif file_type == "Video":
                 else: # This is a yielded frame and its per-frame results (a tuple)
                     frame, current_posture, current_frame_objects, current_frame_hazardous_objects, crying_flag = yielded_item
                     live_video_placeholder.image(frame, channels="BGR", use_container_width=True)
-                    if st.session_state.ws and st.session_state.ws.connected:
+                    
+                    if ensure_ws_connection():
                         resized = cv2.resize(frame, (WIDTH, HEIGHT))
                         b64 = get_base64_frame(resized)
                         msg = {"type": "video_frame", "data": b64}
@@ -420,27 +442,26 @@ elif file_type == "Video":
 
                     # Send sensor data for the current frame based on interval or danger
                     st.session_state.frame_counter += 1
-                    if st.session_state.ws and st.session_state.ws.connected:
-                        should_send = False
-                        if current_frame_hazardous_objects: # Always send if danger is detected
-                            should_send = True
-                        elif st.session_state.frame_counter % SEND_INTERVAL_FRAMES == 0: # Send periodically if no danger
-                            should_send = True
+                    should_send = False
+                    if current_frame_hazardous_objects: # Always send if danger is detected
+                        should_send = True
+                    elif st.session_state.frame_counter % SEND_INTERVAL_FRAMES == 0: # Send periodically if no danger
+                        should_send = True
 
-                        if should_send:
-                            temperature = round(np.random.uniform(70.0, 85.0), 2) # Simulate temperature for video
-                            crying_detected = bool(crying_flag)
-                            
-                            # Determine object status message
-                            object_status_message = ""
-                            if current_frame_hazardous_objects:
-                                object_status_message = f"DANGER: Hazardous objects detected: {', '.join(current_frame_hazardous_objects)}"
-                            else:
-                                object_status_message = "SAFE: No hazardous objects detected."
+                    if should_send:
+                        temperature = round(np.random.uniform(70.0, 85.0), 2) # Simulate temperature for video
+                        crying_detected = bool(crying_flag)
+                        
+                        # Determine object status message
+                        object_status_message = ""
+                        if current_frame_hazardous_objects:
+                            object_status_message = f"DANGER: Hazardous objects detected: {', '.join(current_frame_hazardous_objects)}"
+                        else:
+                            object_status_message = "SAFE: No hazardous objects detected."
 
-                            # Send only the object status message in the objectDetected list
-                            send_sensor_data(st.session_state.ws, temperature, crying_detected, [object_status_message])
-                            st.session_state.frame_counter = 0 # Reset counter after sending
+                        # Send only the object status message in the objectDetected list
+                        send_sensor_data(st.session_state.ws, temperature, crying_detected, [object_status_message])
+                        st.session_state.frame_counter = 0 # Reset counter after sending
 
             if final_video_path:
                 st.subheader("Processed Video (Full)")

@@ -11,7 +11,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   address: text("address"),
   email: text("email").notNull().unique(),
-  phone: text("phone"),
+  phone: text("phone").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -105,10 +105,14 @@ export const tracks = pgTable("tracks", {
 });
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertUserSchema = createInsertSchema(users)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    phone: z.string().min(1, "Phone is required"),
+  });
 
 export const insertWebcamSchema = createInsertSchema(webcams).omit({
   id: true,

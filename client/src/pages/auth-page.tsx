@@ -207,7 +207,7 @@ function RegisterForm() {
             <FormItem>
               <FormLabel>Phone</FormLabel>
               <FormControl>
-                <Input {...field} value={field.value || ""} />
+                <Input type="tel" {...field} value={field.value || ""} />
               </FormControl>
               <FormMessage />
             </FormItem>

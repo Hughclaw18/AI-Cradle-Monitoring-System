@@ -29,7 +29,15 @@ if (useAWS) {
   mode = "AWS RDS";
 } else if (ENV_DB_URL) {
   DB_URL = ENV_DB_URL;
-  mode = ENV_DB_URL.includes("localhost") ? "Local DB (from .env)" : "Remote (Render)";
+  if (ENV_DB_URL.includes("localhost")) {
+    mode = "Local DB (from .env)";
+  } else if (ENV_DB_URL.includes("railway.app") || ENV_DB_URL.includes("rlwy.net")) {
+    mode = "Remote (Railway)";
+  } else if (ENV_DB_URL.includes("render.com")) {
+    mode = "Remote (Render)";
+  } else {
+    mode = "Remote (Other)";
+  }
 } else {
   DB_URL = FALLBACK_LOCAL_DB_URL;
   mode = "Local DB (Fallback)";
@@ -49,6 +57,8 @@ export const pool = new pg.Pool({
   connectionString: DB_URL,
   ssl: DB_URL.includes("render.com") || 
        DB_URL.includes("neon.tech") || 
+       DB_URL.includes("railway.app") ||
+       DB_URL.includes("rlwy.net") ||
        DB_URL.includes("ssl=true") ||
        DB_URL.includes("rds.amazonaws.com")
     ? { rejectUnauthorized: false }
