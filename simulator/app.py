@@ -14,9 +14,22 @@ from utils.inference import predict_cry, predict_object, process_video_for_detec
 # Set page config
 st.set_page_config(page_title="Baby Posture Detection", layout="wide")
 
-# Define the WebSocket server URL and API URL
-WEBSOCKET_URL = "ws://localhost:5000/socket"
-API_URL = "http://localhost:5000/api"
+# Define backend base and derive API/WS URLs (supports Render)
+from urllib.parse import urlparse, urlunparse
+
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:5000").rstrip("/")
+explicit_ws = os.getenv("WEBSOCKET_URL")
+
+def derive_ws_url(http_base: str) -> str:
+    try:
+        u = urlparse(http_base)
+        ws_scheme = "wss" if u.scheme == "https" else "ws"
+        return urlunparse((ws_scheme, u.netloc, "/socket", "", "", ""))
+    except Exception:
+        return "ws://localhost:5000/socket"
+
+API_URL = f"{BACKEND_BASE_URL}/api"
+WEBSOCKET_URL = explicit_ws or derive_ws_url(BACKEND_BASE_URL)
 SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 from config import WIDTH, HEIGHT, SEND_INTERVAL_FRAMES
 def get_base64_frame(frame):

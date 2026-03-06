@@ -4,8 +4,18 @@ import json
 import time
 import random
 import os
+from urllib.parse import urlparse, urlunparse
 
-WEBSOCKET_URL = os.getenv("WEBSOCKET_URL", "ws://localhost:5000/socket")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL")
+def derive_ws_url(http_base: str) -> str:
+    try:
+        u = urlparse(http_base.rstrip("/"))
+        ws_scheme = "wss" if u.scheme == "https" else "ws"
+        return urlunparse((ws_scheme, u.netloc, "/socket", "", "", ""))
+    except Exception:
+        return "ws://localhost:5000/socket"
+
+WEBSOCKET_URL = os.getenv("WEBSOCKET_URL") or (derive_ws_url(BACKEND_BASE_URL) if BACKEND_BASE_URL else "ws://localhost:5000/socket")
 SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 st.title("Streamlit Sensor Data Sender")
