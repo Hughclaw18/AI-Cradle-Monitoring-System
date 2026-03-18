@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { X, AlertTriangle, Info, AlertCircle, BellRing } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { fadeInSlideUp, progressBarAnimation } from "@/lib/animations"; // Import variants and helper
 
 interface NotificationToastProps {
   title: string;
@@ -44,11 +45,14 @@ export function NotificationToast({ title, message, severity, onDismiss, duratio
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 50, scale: 0.9, x: "-50%" }}
-      animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
-      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+      variants={fadeInSlideUp} // Use fadeInSlideUp variant
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      custom={{ yOffset: 50, scaleFactor: 0.9, xOffset: "-50%" }} // Pass custom props for specific animation
       className={cn(
         "fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-md",
+        "md:bottom-8 md:right-8 md:left-auto md:-translate-x-0 md:max-w-xs",
         "bg-background/80 backdrop-blur-2xl border-2 rounded-[2rem] p-5 shadow-2xl transition-all",
         getBorderColor()
       )}
@@ -65,7 +69,7 @@ export function NotificationToast({ title, message, severity, onDismiss, duratio
         <div className="flex-1 pt-1">
           <div className="flex items-center space-x-2 mb-1">
             <BellRing className="h-3 w-3 text-muted-foreground" />
-            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">System Alert</h4>
+            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">System Alert</h4>
           </div>
           <div className="font-bold text-foreground text-base tracking-tight leading-tight">{title}</div>
           <div className="text-sm font-medium text-muted-foreground mt-1 leading-relaxed">{message}</div>
@@ -81,9 +85,7 @@ export function NotificationToast({ title, message, severity, onDismiss, duratio
 
       {/* Progress Bar for Duration */}
       <motion.div 
-        initial={{ width: "100%" }}
-        animate={{ width: "0%" }}
-        transition={{ duration: duration / 1000, ease: "linear" }}
+        {...progressBarAnimation(duration)} // Use progressBarAnimation helper
         className={cn(
           "absolute bottom-0 left-0 h-1 rounded-full",
           severity === 'warning' ? "bg-amber-500" : 

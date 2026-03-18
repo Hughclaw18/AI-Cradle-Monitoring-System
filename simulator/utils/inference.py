@@ -13,7 +13,7 @@ import torchaudio.transforms as T
 from scipy.io import wavfile
 from ultralytics import YOLO, YOLOE
 from utils.model_loader import HAZARDOUS_CLASSES
-from config import FFMPEG_PATH, AUDIO_WIN_SEC
+from config import FFMPEG_PATH, AUDIO_WIN_SEC, CRY_DETECTION_INTERVAL_FRAMES
 MEL = T.MelSpectrogram(sample_rate=16000, n_fft=1024, hop_length=512, n_mels=64)
 DB = T.AmplitudeToDB()
 
@@ -102,10 +102,6 @@ def predict_posture(model, image_file):
         # Clean up temporary uploaded file
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
-        try:
-            os.rmdir(temp_upload_dir)
-        except OSError:
-            pass # Directory might not be empty if multiple files were uploaded or other issues
 
 def predict_object(model, image_file):
     """
@@ -190,10 +186,7 @@ def predict_object(model, image_file):
         # Clean up temporary uploaded file
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
-        try:
-            os.rmdir(temp_upload_dir)
-        except OSError:
-            pass # Directory might not be empty if multiple files were uploaded or other issues
+
 
 import tensorflow as tf
 
@@ -499,7 +492,7 @@ def process_video_for_detection(posture_model, object_model, video_file):
             
             # Real-time cry detection from audio aligned with current frame time
             is_crying_current = False
-            if audio_waveform is not None and audio_sr == 16000 and fps > 0:
+            if audio_waveform is not None and audio_sr == 16000 and fps > 0 and (frame_index % CRY_DETECTION_INTERVAL_FRAMES == 0):
                 current_time = frame_index / max(fps, 1)
                 samples = int(AUDIO_WIN_SEC * audio_sr)
                 end = int(current_time * audio_sr)

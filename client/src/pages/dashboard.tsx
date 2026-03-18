@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorCard } from "@/components/sensor-card";
 import { SpotifyPlayer } from "@/components/spotify-player";
 import { SpotifyConnect } from "@/components/spotify-connect";
+import { DetectionList } from "@/components/detection-list"; // Import the new component
 // import Detections from "@/components/detection-history";
 import DetectionGraph from "@/components/DetectionGraph";
 import { SettingsPanel } from "@/components/settings-panel";
@@ -32,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { pulsingOpacity, emergencyButtonAnimation } from "@/lib/animations"; // Import variants
 
 interface DetectionEvent {
   type: 'crying' | 'object' | 'temperature';
@@ -69,9 +71,6 @@ export default function Dashboard() {
     motionAlerts: false,
   };
   const [detections, setDetections] = useState<DetectionEvent[]>([]);
-  const [isObjectExpanded, setIsObjectExpanded] = useState(false);
-  const [isCryingExpanded, setIsCryingExpanded] = useState(false);
-  const [isTemperatureExpanded, setIsTemperatureExpanded] = useState(false);
 
   useEffect(() => {
     if (sensorData) {
@@ -246,8 +245,8 @@ export default function Dashboard() {
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-1.5">
             <motion.div 
-              animate={{ opacity: connected ? [1, 0.5, 1] : 1 }}
-              transition={{ duration: 2, repeat: Infinity }}
+              variants={pulsingOpacity} // Use pulsingOpacity variant
+              animate="animate"
               className={`w-2.5 h-2.5 rounded-full shadow-sm ${connected ? 'bg-green-400 shadow-green-400/50' : 'bg-destructive shadow-destructive/50'}`} 
             />
             <span className="text-[10px]">{connected ? 'Live Sync' : 'Offline'}</span>
@@ -359,7 +358,7 @@ export default function Dashboard() {
                 {/* Left Column: Video Feed */}
                 <div className="lg:col-span-8 space-y-6">
                   <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-background">
-                    <VideoFeed />
+                    <VideoFeed settings={settings || defaultSettings} />
                   </div>
 
                   {/* Quick Actions Desktop */}
@@ -402,7 +401,7 @@ export default function Dashboard() {
                       <SensorCard
                         type="temperature"
                         value={`${Math.round(sensorData.temperature)}°F`}
-                        status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'Critical' : 'Stable'}
+                        status={sensorData.temperature > (settings?.tempThreshold || 78) ? 'Critical' : 'Normal'}
                         timestamp={getTimeAgo(sensorData.timestamp)}
                         isAlert={sensorData.temperature > (settings?.tempThreshold || 78)}
                         threshold={settings?.tempThreshold}
@@ -414,7 +413,7 @@ export default function Dashboard() {
                         value={sensorData.objectDetected && sensorData.objectDetected.length > 0 
                           ? sensorData.objectDetected[0].object_name 
                           : 'Clear'}
-                        status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Detected' : 'Secure'}
+                        status={sensorData.objectDetected && sensorData.objectDetected.length > 0 ? 'Detected' : 'Clear'}
                         timestamp={getTimeAgo(sensorData.timestamp)}
                         isActive={!!(sensorData.objectDetected && sensorData.objectDetected.length > 0)}
                       />
@@ -422,7 +421,7 @@ export default function Dashboard() {
                       <SensorCard
                         type="crying"
                         value={sensorData.cryingDetected ? 'Detected' : 'Silent'}
-                        status={sensorData.cryingDetected ? 'Distress' : 'Quiet'}
+                        status={sensorData.cryingDetected ? 'Detected' : 'Silent'}
                         timestamp={getTimeAgo(sensorData.timestamp)}
                         isActive={sensorData.cryingDetected}
                         isAlert={sensorData.cryingDetected}
@@ -472,132 +471,39 @@ export default function Dashboard() {
               {/* Object Detections */}
               <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
                 <CardContent className="p-6">
-                  <div 
-                    className="flex justify-between items-center mb-6 cursor-pointer md:cursor-default"
-                    onClick={() => setIsObjectExpanded(!isObjectExpanded)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-green-500/10 rounded-xl">
-                        <Footprints className="h-5 w-5 text-green-500" />
-                      </div>
-                      <h3 className="font-bold text-lg text-foreground tracking-tight">Object Events</h3>
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="p-2 bg-green-500/10 rounded-xl">
+                      <Footprints className="h-5 w-5 text-green-500" />
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform md:hidden ${isObjectExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-bold text-lg text-foreground tracking-tight">Object Events</h3>
                   </div>
-                  <div className={`${isObjectExpanded ? 'block' : 'hidden'} md:block space-y-3`}>
-                    {detections?.filter(d => d.type === 'object').length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
-                          <Footprints className="h-6 w-6 text-muted-foreground/50" />
-                        </div>
-                        <p className="text-sm font-medium text-muted-foreground">No objects detected.</p>
-                      </div>
-                    ) : (
-                      detections?.filter(d => d.type === 'object').slice(0, 10).map((entry, index) => (
-                        <motion.div 
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          key={index} 
-                          className="p-3 rounded-2xl bg-muted/30 border border-border/50 hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(entry.timestamp), 'p')}</span>
-                            <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">{format(new Date(entry.timestamp), 'MMM d')}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-foreground leading-tight">{entry.details}</p>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+                  <DetectionList detections={detections?.filter(d => d.type === 'object')} emptyMessage="No objects detected." />
                 </CardContent>
               </Card>
 
               {/* Crying Detections */}
               <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
                 <CardContent className="p-6">
-                  <div 
-                    className="flex justify-between items-center mb-6 cursor-pointer md:cursor-default"
-                    onClick={() => setIsCryingExpanded(!isCryingExpanded)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-amber-500/10 rounded-xl">
-                        <Volume2 className="h-5 w-5 text-amber-500" />
-                      </div>
-                      <h3 className="font-bold text-lg text-foreground tracking-tight">Audio Events</h3>
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="p-2 bg-amber-500/10 rounded-xl">
+                      <Volume2 className="h-5 w-5 text-amber-500" />
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform md:hidden ${isCryingExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-bold text-lg text-foreground tracking-tight">Audio Events</h3>
                   </div>
-                  <div className={`${isCryingExpanded ? 'block' : 'hidden'} md:block space-y-3`}>
-                    {detections?.filter(d => d.type === 'crying').length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
-                          <Volume2 className="h-6 w-6 text-muted-foreground/50" />
-                        </div>
-                        <p className="text-sm font-medium text-muted-foreground">No crying events recorded.</p>
-                      </div>
-                    ) : (
-                      detections?.filter(d => d.type === 'crying').slice(0, 10).map((entry, index) => (
-                        <motion.div 
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          key={index} 
-                          className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors"
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">{format(new Date(entry.timestamp), 'p')}</span>
-                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">{format(new Date(entry.timestamp), 'MMM d')}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-foreground leading-tight">{entry.details}</p>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+                  <DetectionList detections={detections?.filter(d => d.type === 'crying')} emptyMessage="No crying events recorded." />
                 </CardContent>
               </Card>
 
               {/* Temperature Alerts */}
               <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
                 <CardContent className="p-6">
-                  <div 
-                    className="flex justify-between items-center mb-6 cursor-pointer md:cursor-default"
-                    onClick={() => setIsTemperatureExpanded(!isTemperatureExpanded)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-destructive/10 rounded-xl">
-                        <Thermometer className="h-5 w-5 text-destructive" />
-                      </div>
-                      <h3 className="font-bold text-lg text-foreground tracking-tight">System Alerts</h3>
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="p-2 bg-destructive/10 rounded-xl">
+                      <Thermometer className="h-5 w-5 text-destructive" />
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform md:hidden ${isTemperatureExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                    <h3 className="font-bold text-lg text-foreground tracking-tight">System Alerts</h3>
                   </div>
-                  <div className={`${isTemperatureExpanded ? 'block' : 'hidden'} md:block space-y-3`}>
-                    {detections?.filter(d => d.type === 'temperature').length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-2">
-                          <Thermometer className="h-6 w-6 text-muted-foreground/50" />
-                        </div>
-                        <p className="text-sm font-medium text-muted-foreground">No temperature alerts.</p>
-                      </div>
-                    ) : (
-                      detections?.filter(d => d.type === 'temperature').slice(0, 10).map((entry, index) => (
-                        <motion.div 
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          key={index} 
-                          className="p-3 rounded-2xl bg-destructive/5 border border-destructive/10 hover:bg-destructive/10 transition-colors"
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-destructive uppercase tracking-wider">{format(new Date(entry.timestamp), 'p')}</span>
-                            <span className="text-[10px] font-bold text-destructive uppercase tracking-widest">{format(new Date(entry.timestamp), 'MMM d')}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-foreground leading-tight">{entry.details}</p>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+                  <DetectionList detections={detections?.filter(d => d.type === 'temperature')} emptyMessage="No temperature alerts." />
                 </CardContent>
               </Card>
             </div>
@@ -617,10 +523,11 @@ export default function Dashboard() {
       {/* Floating Emergency Action Button */}
       <AnimatePresence>
         <motion.div 
-          initial={{ scale: 0, rotate: -45 }}
-          animate={{ scale: 1, rotate: 0 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
+          variants={emergencyButtonAnimation} // Use emergencyButtonAnimation variant
+          initial="initial"
+          animate="animate"
+          whileHover="whileHover"
+          whileTap="whileTap"
           className="fixed bottom-24 lg:bottom-6 right-6 z-[100]"
         >
           <Button
@@ -690,31 +597,3 @@ export default function Dashboard() {
   );
 }
 
-// Add this new component outside the Dashboard function, but within the same file
-interface DetectionLogItemProps {
-  entry: DetectionEvent;
-}
-
-const DetectionLogItem: React.FC<DetectionLogItemProps> = ({ entry }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  return (
-    <div className="border rounded-lg shadow-sm bg-card">
-      <div
-        className="flex justify-between items-center p-3 cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <p className="text-sm font-medium">
-          {entry.type === 'temperature' ? 'Temperature Alert' : `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} Detection`}
-          <span className="ml-2 text-muted-foreground">{format(new Date(entry.timestamp), 'PPP p')}</span>
-        </p>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
-      </div>
-      {isExpanded && (
-        <div className="p-3 pt-0 border-t">
-          <p className="text-sm text-muted-foreground">Details: {entry.details}</p>
-        </div>
-      )}
-    </div>
-  );
-};

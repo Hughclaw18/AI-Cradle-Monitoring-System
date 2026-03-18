@@ -54,6 +54,10 @@ def load_posture_detection_model(model_path=DEFAULT_POSTURE_MODEL):
     try:
         # Load the YOLO model from the local path
         model = YOLO(model_path)
+        # Move model to CUDA if available, otherwise to CPU
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+        st.info(f"Loaded posture detection model to {device}")
         # No need to set classes explicitly if the model is already trained on them
         # The model.names attribute will contain the trained classes.
         return model
@@ -74,6 +78,10 @@ def load_object_detection_model(model_path=DEFAULT_OBJECT_MODEL):
         # Load the YOLOe model from the local path
         # Using YOLOE class as officially requested
         model = YOLOE(model_path)
+        # Move model to CUDA if available, otherwise to CPU
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+        st.info(f"Loaded object detection model to {device}")
         # Define hazardous objects for zero-shot prompting
         try:
             model.set_classes(HAZARDOUS_CLASSES, model.get_text_pe(HAZARDOUS_CLASSES))
@@ -87,6 +95,10 @@ def load_object_detection_model(model_path=DEFAULT_OBJECT_MODEL):
         st.info(f"loaded YOLOE model from {FALLBACK_OBJECT_MODEL}...")
         try:
             model = YOLO(FALLBACK_OBJECT_MODEL)
+            # Move fallback model to CUDA if available, otherwise to CPU
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model.to(device)
+            st.info(f"Loaded fallback object detection model to {device}")
             return model
         except Exception as fallback_e:
             st.error(f"Error loading fallback model: {fallback_e}")
@@ -145,9 +157,11 @@ def load_cry_detection_model(model_path=DEFAULT_CRY_MODEL):
     """
     try:
         model = get_model()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if os.path.exists(model_path):
-            model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-            st.info(f"Loaded cry detection weights from {model_path}")
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            model.to(device)
+            st.info(f"Loaded cry detection weights from {model_path} to {device}")
         else:
             st.warning(f"Cry detection weights not found at {model_path}. Using uninitialized model (demo mode).")
         return model

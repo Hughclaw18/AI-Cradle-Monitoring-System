@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import { SystemSettings } from "@shared/schema";
 import { WebcamManager } from "./webcam-manager";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"; // Import Accordion components
 
 interface SettingsPanelProps {
   settings: SystemSettings;
@@ -113,79 +119,86 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
 
       <div className="space-y-4">
         {/* Automation Settings */}
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium text-foreground mb-4">Automation</h3>
-            <div className="space-y-3">
-              
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <div className="font-medium text-foreground">Auto Response</div>
-                  <div className="text-sm text-muted-foreground">Respond to crying automatically</div>
-                </div>
-                <Switch
-                  checked={settings.autoResponse}
-                  onCheckedChange={(enabled) => onUpdateSettings({ autoResponse: enabled })}
-                />
-              </div>
+        <Accordion type="multiple" defaultValue={["automation", "notifications"]} className="w-full">
+          <AccordionItem value="automation">
+            <AccordionTrigger>
+              <h3 className="font-medium text-foreground">Automation Settings</h3>
+            </AccordionTrigger>
+            <AccordionContent>
+              <Card className="shadow-none border-none">
+                <CardContent className="p-0">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium text-foreground">Auto Response</div>
+                        <div className="text-sm text-muted-foreground">Respond to crying automatically</div>
+                      </div>
+                      <Switch
+                        checked={settings.autoResponse}
+                        onCheckedChange={(enabled) => onUpdateSettings({ autoResponse: enabled })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium text-foreground">Night Mode</div>
+                        <div className="text-sm text-muted-foreground">Reduced sensitivity 10 PM - 6 AM</div>
+                      </div>
+                      <Switch
+                        checked={settings.nightMode}
+                        onCheckedChange={(enabled) => onUpdateSettings({ nightMode: enabled })}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <div className="font-medium text-foreground">Night Mode</div>
-                  <div className="text-sm text-muted-foreground">Reduced sensitivity 10 PM - 6 AM</div>
-                </div>
-                <Switch
-                  checked={settings.nightMode}
-                  onCheckedChange={(enabled) => onUpdateSettings({ nightMode: enabled })}
-                />
-              </div>
-
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notification Settings */}
-        <Card>
-          <CardContent className="p-4">
-            <h3 className="font-medium text-foreground mb-4">Notifications</h3>
-            <div className="space-y-3">
-              
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <div className="font-medium text-foreground">Push Notifications</div>
-                  <div className="text-sm text-muted-foreground">Receive alerts on your device</div>
-                </div>
-                <Switch
-                  checked={settings.pushNotifications}
-                  onCheckedChange={(enabled) => onUpdateSettings({ pushNotifications: enabled })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <div className="font-medium text-foreground">Temperature Alerts</div>
-                  <div className="text-sm text-muted-foreground">Alert when temperature exceeds threshold</div>
-                </div>
-                <Switch
-                  checked={settings.tempAlerts}
-                  onCheckedChange={(enabled) => onUpdateSettings({ tempAlerts: enabled })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div>
-                  <div className="font-medium text-foreground">Object Alerts</div>
-                  <div className="text-sm text-muted-foreground">Alert when object is detected</div>
-                </div>
-                <Switch
-                  checked={settings.motionAlerts}
-                  onCheckedChange={(enabled) => onUpdateSettings({ motionAlerts: enabled })}
-                />
-              </div>
-
-            </div>
-          </CardContent>
-        </Card>
+          {/* Notification Settings */}
+          <AccordionItem value="notifications">
+            <AccordionTrigger>
+              <h3 className="font-medium text-foreground">Notification Settings</h3>
+            </AccordionTrigger>
+            <AccordionContent>
+              <Card className="shadow-none border-none">
+                <CardContent className="p-0">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium text-foreground">Push Notifications</div>
+                        <div className="text-sm text-muted-foreground">Receive alerts on your device</div>
+                      </div>
+                      <Switch
+                        checked={settings.pushNotifications}
+                        onCheckedChange={(enabled) => onUpdateSettings({ pushNotifications: enabled })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium text-foreground">Temperature Alerts</div>
+                        <div className="text-sm text-muted-foreground">Alert when temperature exceeds threshold</div>
+                      </div>
+                      <Switch
+                        checked={settings.tempAlerts}
+                        onCheckedChange={(enabled) => onUpdateSettings({ tempAlerts: enabled })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <div className="font-medium text-foreground">Object Alerts</div>
+                        <div className="text-sm text-muted-foreground">Alert when object is detected</div>
+                      </div>
+                      <Switch
+                        checked={settings.motionAlerts}
+                        onCheckedChange={(enabled) => onUpdateSettings({ motionAlerts: enabled })}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         {/* System Info */}
         <Card>

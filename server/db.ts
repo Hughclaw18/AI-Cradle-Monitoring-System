@@ -3,6 +3,10 @@ import pg from "pg";
 import * as schema from "@shared/schema";
 import fs from "fs";
 import path from "path";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
 
 // Configuration for database selection
 const AWS_PY_PATH = path.resolve(process.cwd(), "AWS.py");

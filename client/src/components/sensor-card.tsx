@@ -2,6 +2,7 @@ import { Thermometer, Footprints, Volume2, AlertTriangle, CheckCircle2 } from "l
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { fadeInSlideUp, whileHoverScale, pulsingOpacity, fadeInSlideLeft } from "@/lib/animations"; // Import all necessary variants
 
 interface SensorCardProps {
   type: 'temperature' | 'object' | 'crying';
@@ -61,10 +62,10 @@ export function SensorCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      transition={{ duration: 0.3 }}
+      variants={fadeInSlideUp}
+      initial="initial"
+      animate="animate"
+      whileHover={whileHoverScale.whileHover}
     >
       <Card className={cn(
         "relative overflow-hidden border-2 transition-all duration-300",
@@ -74,8 +75,8 @@ export function SensorCard({
         {isAlert && (
           <motion.div 
             className="absolute inset-0 bg-destructive/5"
-            animate={{ opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 2, repeat: Infinity }}
+            variants={pulsingOpacity}
+            animate="animate"
           />
         )}
 
@@ -99,7 +100,7 @@ export function SensorCard({
               isActive ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-muted text-muted-foreground"
             )}>
               {isAlert ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-              <span>{status}</span>
+              <span>{status === 'Secure' ? 'Clear' : status === 'Quiet' ? 'Silent' : status === 'Stable' ? 'Normal' : status}</span>
             </div>
           </div>
 
@@ -115,14 +116,14 @@ export function SensorCard({
           <AnimatePresence mode="wait">
             {type === 'temperature' && threshold && currentValue && (
               <motion.div 
-                initial={{ opacity: 0, height: 0 }}
+                initial={{ opacity: 0, height: 0 }} // Keep these inline for specific behavior
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className="mt-5"
               >
                 <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
                   <motion.div 
-                    initial={{ width: 0 }}
+                    initial={{ width: 0 }} // Keep these inline for specific behavior
                     animate={{ width: getProgressWidth() }}
                     transition={{ duration: 1, ease: "easeOut" }}
                     className={cn(
@@ -141,8 +142,9 @@ export function SensorCard({
 
           {(type === 'object' || type === 'crying') && (
             <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              variants={fadeInSlideUp}
+              initial="initial"
+              animate="animate"
               className="flex items-center space-x-2 mt-5 p-2 rounded-lg bg-muted/50"
             >
               <div className={cn(
@@ -157,8 +159,9 @@ export function SensorCard({
 
           {isAlert && type === 'crying' && (
             <motion.div 
-              initial={{ x: -10, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
+              variants={fadeInSlideLeft}
+              initial="initial"
+              animate="animate"
               className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 mt-4 shadow-inner"
             >
               <div className="flex items-center space-x-3">

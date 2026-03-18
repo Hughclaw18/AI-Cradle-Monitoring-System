@@ -17,7 +17,6 @@ st.set_page_config(page_title="Baby Posture Detection", layout="wide")
 # Define backend base and derive API/WS URLs (supports Render)
 from urllib.parse import urlparse, urlunparse
 
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:5000").rstrip("/")
 explicit_ws = os.getenv("WEBSOCKET_URL")
 
 def derive_ws_url(http_base: str) -> str:
@@ -28,12 +27,9 @@ def derive_ws_url(http_base: str) -> str:
     except Exception:
         return "ws://localhost:5000/socket"
 
-API_URL = f"{BACKEND_BASE_URL}/api"
-WEBSOCKET_URL = explicit_ws or derive_ws_url(BACKEND_BASE_URL)
-SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
-from config import WIDTH, HEIGHT, SEND_INTERVAL_FRAMES
+from config import WIDTH, HEIGHT, SEND_INTERVAL_FRAMES, JPEG_QUALITY, VIDEO_SEND_INTERVAL_FRAMES
 def get_base64_frame(frame):
-    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     return base64.b64encode(buffer).decode('utf-8')
 
 # Initialize session state for auth
@@ -45,6 +41,12 @@ if 'backend_base' not in st.session_state:
     st.session_state.backend_base = os.getenv("BACKEND_BASE_URL", "https://ai-cradle-monitoring-system.onrender.com").rstrip("/")
 if 'sim_token' not in st.session_state:
     st.session_state.sim_token = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
+
+# Compute effective API and WS URLs from current settings (supports Render)
+EFFECTIVE_BASE = st.session_state.backend_base.rstrip("/")
+API_URL = f"{EFFECTIVE_BASE}/api"
+WEBSOCKET_URL = explicit_ws or derive_ws_url(EFFECTIVE_BASE)
+SIMULATOR_TOKEN = st.session_state.sim_token
 
 # Title
 st.title("👶 Baby Posture and Object Detection")
@@ -116,12 +118,6 @@ with st.sidebar:
 
 # Title
 st.title("👶 Baby Posture and Object Detection")
-
-# Apply backend settings
-BACKEND_BASE_URL = st.session_state.backend_base.rstrip("/")
-SIMULATOR_TOKEN = st.session_state.sim_token
-API_URL = f"{BACKEND_BASE_URL}/api"
-WEBSOCKET_URL = explicit_ws or derive_ws_url(BACKEND_BASE_URL)
 
 # --- Model Initialization (Cached) ---
 @st.cache_resource
@@ -205,7 +201,9 @@ def send_sensor_data(ws, temperature, crying_detected, object_detected_list):
 if 'ws' not in st.session_state:
     st.session_state.ws = None
 if 'frame_counter' not in st.session_state:
-    st.session_state.frame_counter = 0 # Initialize frame counter
+    st.session_state.frame_counter = 0 # Initialize frame counter for sensor data
+if 'video_frame_counter' not in st.session_state:
+    st.session_state.video_frame_counter = 0 # Initialize frame counter for video streaming
 SEND_INTERVAL_FRAMES = SEND_INTERVAL_FRAMES
 
 st.subheader("WebSocket Connection")
@@ -428,6 +426,7 @@ elif file_type == "Video":
         posture_summary_overall = "Unknown"
 
         st.session_state.frame_counter = 0 # Reset counter for new video upload
+        st.session_state.video_frame_counter = 0 # Reset video frame counter for new video upload
 
         try:
             for yielded_item in process_video_for_detection(posture_model, object_model, uploaded_file):
@@ -446,14 +445,17 @@ elif file_type == "Video":
                     frame, current_posture, current_frame_objects, current_frame_hazardous_objects, crying_flag = yielded_item
                     live_video_placeholder.image(frame, channels="BGR", use_container_width=True)
                     
-                    if ensure_ws_connection():
-                        resized = cv2.resize(frame, (WIDTH, HEIGHT))
-                        b64 = get_base64_frame(resized)
-                        msg = {"type": "video_frame", "data": b64}
-                        try:
-                            st.session_state.ws.send(json.dumps(msg))
-                        except Exception as e:
-                            pass
+                    st.session_state.video_frame_counter += 1
+                    if st.session_state.video_frame_counter % VIDEO_SEND_INTERVAL_FRAMES == 0:
+                        if ensure_ws_connection():
+                            resized = cv2.resize(frame, (WIDTH, HEIGHT))
+                            b64 = get_base64_frame(resized)
+                            msg = {"type": "video_frame", "data": b64}
+                            try:
+                                st.session_state.ws.send(json.dumps(msg))
+                            except Exception as e:
+                                pass
+                        st.session_state.video_frame_counter = 0 # Reset counter after sending
                     
                     posture_summary_placeholder.write(f"**Posture Status (Current Frame):** {current_posture}")
                     objects_detected_placeholder.write(f"**Objects Detected (Current Frame):** {', '.join(current_frame_objects) if current_frame_objects else 'None'}")
