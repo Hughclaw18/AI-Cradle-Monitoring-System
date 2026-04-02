@@ -56,9 +56,9 @@ export function VideoFeed({ settings }: VideoFeedProps) {
   }, [selectedWebcamId, settings?.enableLocalWebcam]);
 
   return (
-    <div className="relative group">
+    <div className="flex flex-col space-y-4 lg:space-y-6">
       {/* Video Container */}
-      <div className="aspect-video bg-neutral-950 rounded-[2rem] overflow-hidden relative border border-white/5 shadow-inner">
+      <div className="aspect-video bg-neutral-950 rounded-3xl overflow-hidden relative border border-white/5 shadow-2xl group">
         <AnimatePresence mode="wait">
           {selectedWebcamId === "default" && settings?.enableLocalWebcam ? (
              streamError ? (
@@ -129,64 +129,71 @@ export function VideoFeed({ settings }: VideoFeedProps) {
         {/* Scanline Effect */}
         <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_4px,3px_100%] z-10 opacity-20" />
         
-        {/* HUD Overlays */}
-        <div className="absolute inset-0 p-6 flex flex-col justify-between pointer-events-none z-20">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col space-y-2">
-              <div className="flex items-center space-x-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 self-start">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-black text-white uppercase tracking-widest">Live Feed</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full self-start">
-                <div className={cn("w-1.5 h-1.5 rounded-full", connected ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-red-500 shadow-[0_0_8px_#ef4444]")} />
-                <span className="text-[9px] font-bold text-white/70 uppercase tracking-tighter">{connected ? "System Online" : "System Offline"}</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full self-start">
-                <ShieldCheck className="h-3 w-3 text-primary" />
-                <span className="text-[9px] font-bold text-white/70 uppercase tracking-tighter">SECURE CHANNEL</span>
-              </div>
-            </div>
-            
-            <div className="flex flex-col items-end space-y-1">
-              <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-[10px] font-mono text-white">
-                {new Date().toISOString().slice(11, 19)} UTC
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-end mb-4">
-            <div className="flex space-x-4">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-bold text-white/40 uppercase tracking-widest mb-1">Source</span>
-                <span className="text-[10px] font-black text-white uppercase tracking-wider">{selectedWebcamId.replace('_', ' ')}</span>
-              </div>
-            </div>
+        {/* Minimal Source Overlay - Still helpful but unobtrusive */}
+        <div className="absolute top-4 left-4 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10">
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">{selectedWebcamId.replace('_', ' ')}</span>
           </div>
         </div>
       </div>
 
-      {/* Floating Controls */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 transition-transform group-hover:-translate-y-1">
-        <div className="bg-background/90 backdrop-blur-xl border border-border shadow-2xl rounded-2xl p-1 flex items-center">
-          <Select value={selectedWebcamId} onValueChange={setSelectedWebcamId}>
-            <SelectTrigger className="w-[200px] h-10 border-none bg-transparent shadow-none focus:ring-0 text-xs font-bold uppercase tracking-widest">
-              <div className="flex items-center space-x-2">
-                <Camera className="h-4 w-4 text-primary" />
-                <SelectValue placeholder="SWITCH CHANNEL" />
-              </div>
-            </SelectTrigger>
-            <SelectContent className="rounded-2xl border-2">
-              {settings?.enableLocalWebcam && (
-                <SelectItem value="default" className="text-xs font-bold uppercase tracking-widest">LOCAL SENSOR</SelectItem>
-              )}
-              <SelectItem value="simulator_ws" className="text-xs font-bold uppercase tracking-widest">SIMULATOR NET</SelectItem>
-              {webcams?.map((cam) => (
-                <SelectItem key={cam.id} value={cam.id.toString()} className="text-xs font-bold uppercase tracking-widest">
-                  {cam.name.toUpperCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Info & Controls Panel Below Video */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center bg-card/30 backdrop-blur-xl border border-border/50 rounded-3xl p-4 shadow-xl">
+        <div className="flex flex-col space-y-3">
+          <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+            <div className="flex items-center space-x-2 bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-[10px] font-black text-primary uppercase tracking-widest">Live Feed</span>
+            </div>
+            
+            <div className={cn(
+              "flex items-center space-x-2 px-3 py-1.5 rounded-full border",
+              connected ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"
+            )}>
+              <div className={cn("w-1.5 h-1.5 rounded-full", connected ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-red-500 shadow-[0_0_8px_#ef4444]")} />
+              <span className={cn("text-[10px] font-bold uppercase tracking-tight", connected ? "text-green-500" : "text-red-500")}>
+                {connected ? "System Online" : "System Offline"}
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 bg-muted px-3 py-1.5 rounded-full border border-border/50">
+              <ShieldCheck className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">SECURE CHANNEL</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2 text-[10px] font-mono text-muted-foreground ml-1">
+            <Monitor className="h-3 w-3" />
+            <span>ENCRYPTED_LINK_{new Date().toISOString().slice(11, 19).replace(/:/g, '')}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:items-end space-y-3">
+          <div className="w-full md:w-auto">
+            <Select value={selectedWebcamId} onValueChange={setSelectedWebcamId}>
+              <SelectTrigger className="w-full md:w-[240px] h-12 rounded-2xl border-2 bg-background/50 backdrop-blur shadow-sm focus:ring-primary/20 text-xs font-bold uppercase tracking-widest">
+                <div className="flex items-center space-x-2">
+                  <Camera className="h-4 w-4 text-primary" />
+                  <SelectValue placeholder="SWITCH CHANNEL" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl border-2">
+                {settings?.enableLocalWebcam && (
+                  <SelectItem value="default" className="text-xs font-bold uppercase tracking-widest">LOCAL SENSOR</SelectItem>
+                )}
+                <SelectItem value="simulator_ws" className="text-xs font-bold uppercase tracking-widest">SIMULATOR NET</SelectItem>
+                {webcams?.map((cam) => (
+                  <SelectItem key={cam.id} value={cam.id.toString()} className="text-xs font-bold uppercase tracking-widest">
+                    {cam.name.toUpperCase()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="text-[10px] font-mono text-muted-foreground">
+            {new Date().toISOString().slice(11, 19)} UTC
+          </div>
         </div>
       </div>
     </div>
