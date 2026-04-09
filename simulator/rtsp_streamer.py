@@ -21,7 +21,7 @@ HLS_PORT = 8888
 MEDIAMTX_PATH = os.path.join(os.path.dirname(__file__), "mediamtx.exe")
 CLOUDFLARED_PATH = os.path.join(os.path.dirname(__file__), "cloudflared.exe")
 FFMPEG_PATH = r"c:\fyp\SmartCradleMonitor\node_modules\ffmpeg-static\ffmpeg.exe"
-API_URL = "http://localhost:5000/api"
+API_URL = "https://ai-cradle-monitoring-system-production.up.railway.app/api"
 
 # Internet Streaming
 ENABLE_INTERNET = True # Set to True to start a tunnel

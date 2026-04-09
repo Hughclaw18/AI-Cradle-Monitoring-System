@@ -2,8 +2,12 @@ SEND_INTERVAL_FRAMES = 20
 WIDTH = 320
 HEIGHT = 240
 AUDIO_WIN_SEC = 1.0
-JPEG_QUALITY = 50 # Lower for less latency, higher for better quality
-VIDEO_SEND_INTERVAL_FRAMES = 1 # Send every frame by default for video streaming
-CRY_DETECTION_INTERVAL_FRAMES = 10 # Perform cry detection every N frames
+JPEG_QUALITY = 50             # Lower for less latency, higher for better quality
+VIDEO_SEND_INTERVAL_FRAMES = 8  # Send every Nth frame over WebSocket (1 was too frequent)
+DISPLAY_INTERVAL_FRAMES = 4     # Re-render the live preview every Nth frame
+SUMMARY_UPDATE_INTERVAL = 2.0   # Seconds between status badge refreshes in video tab
+CRY_DETECTION_INTERVAL_FRAMES = 10  # Perform cry detection every N frames
+DETECTION_INTERVAL_FRAMES = 5   # Perform posture/object detection every N frames
+OBJECT_CONF_THRESHOLD = 0.55    # Minimum confidence to accept an object detection
 FFMPEG_PATH = r"c:\fyp\SmartCradleMonitor\node_modules\ffmpeg-static\ffmpeg.exe"
-
+DB_URL = "postgresql://postgres:SiLGIwcdGqfQfAiChRypJJJIuIMSsPbq@caboose.proxy.rlwy.net:37281/railway"

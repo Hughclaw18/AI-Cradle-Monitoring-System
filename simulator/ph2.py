@@ -22,7 +22,7 @@ from utils.inference import (
 
 st.set_page_config(page_title="Baby Posture, Object Detection & Sensor Simulator", layout="wide")
 
-WEBSOCKET_URL = os.getenv("WEBSOCKET_URL", "ws://localhost:5000/socket")
+WEBSOCKET_URL = os.getenv("WEBSOCKET_URL", "wss://ai-cradle-monitoring-system-production.up.railway.app/socket")
 SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 st.title("👶 Baby Posture/Object Detection & Sensor Simulator")

@@ -6,7 +6,7 @@ import random
 import os
 from urllib.parse import urlparse, urlunparse
 
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://ai-cradle-monitoring-system-production.up.railway.app")
 def derive_ws_url(http_base: str) -> str:
     try:
         u = urlparse(http_base.rstrip("/"))

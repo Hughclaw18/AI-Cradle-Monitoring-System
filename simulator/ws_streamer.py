@@ -15,7 +15,7 @@ from utils.model_loader import load_object_detection_model, load_posture_detecti
 import supervision as sv
 
 # Configuration
-WS_URL = os.getenv("WS_URL", "ws://localhost:5000/socket")
+WS_URL = os.getenv("WS_URL", "wss://ai-cradle-monitoring-system-production.up.railway.app/socket")
 SIMULATOR_TOKEN = os.getenv("SIMULATOR_TOKEN", "default-simulator-token")
 
 WIDTH, HEIGHT = 320, 240 # Lower resolution for WS streaming to save bandwidth

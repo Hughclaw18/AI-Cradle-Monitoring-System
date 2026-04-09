@@ -16,7 +16,7 @@ DEFAULT_CRY_MODEL = os.path.join(MODELS_DIR, "cry_detection_audio.pt")
 
 HAZARDOUS_CLASSES = [
     "knife", "scissors", "glass", "plastic bag", "small toy",
-    "cord", "medication", "battery", "coin", "choking hazard", "insects",
+    "cord", "medication", "battery", "coin", "insects",
     "snake", "python snake", "scorpion", "bug", "sharp object",
     "loose sheet", "crib bumper", "stuffed animal", "plush toy",
     "sleep positioner", "wedge",
@@ -36,8 +36,6 @@ HAZARDOUS_CLASSES = [
     "night light", "lamp", "baby monitor",
     "space heater", "heater",
     "hot drink", "mug", "bottle warmer",
-    "hard toy",
-    "pet toy", "pet food", "pet fur",
     "rodent droppings", "ant", "cockroach", "spider",
     "mold", "moldy object",
 ]
