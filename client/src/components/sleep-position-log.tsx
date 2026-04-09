@@ -12,7 +12,6 @@ import { useQuery } from "@tanstack/react-query";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Baby, AlertTriangle, ChevronDown, Download } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -88,17 +87,17 @@ function CurrentPositionCard({ position }: { position: Position }) {
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.25 }}
       className={cn(
-        "rounded-3xl border-2 p-6 flex items-center gap-5",
+        "rounded-2xl border-2 p-4 flex items-center gap-4",
         cfg.bg, cfg.border,
         isDanger && "animate-pulse"
       )}
     >
-      <div className={cn("p-4 rounded-2xl text-4xl", cfg.bg)}>
+      <div className={cn("p-3 rounded-xl text-3xl", cfg.bg)}>
         {cfg.emoji}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Current Position</p>
-        <p className={cn("text-3xl font-black leading-none", cfg.color)}>{cfg.label}</p>
+        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Current Position</p>
+        <p className={cn("text-2xl font-black leading-none", cfg.color)}>{cfg.label}</p>
         {isDanger && (
           <p className="text-xs text-destructive font-bold mt-1.5 flex items-center gap-1">
             <AlertTriangle className="h-3.5 w-3.5" /> Airway risk — check on baby
@@ -342,8 +341,8 @@ export function SleepPositionLog({ currentPosition }: SleepPositionLogProps) {
         })}
       </div>
 
-      {/* Timeline */}
-      <ScrollArea className="h-[400px] pr-1">
+      {/* Timeline — no fixed height, scrolls with page */}
+      <div className="space-y-6 pb-4">
         {grouped.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-2">
             <Baby className="h-8 w-8 opacity-20" />
@@ -351,7 +350,7 @@ export function SleepPositionLog({ currentPosition }: SleepPositionLogProps) {
             <p className="text-xs opacity-60">Start the simulator and upload a video</p>
           </div>
         ) : (
-          <div className="space-y-6 pb-4">
+          <>
             {grouped.map(({ label, date, entries: dayEntries }) => (
               <div key={date}>
                 <div className="flex items-center gap-3 mb-3 sticky top-0 bg-background/80 backdrop-blur py-1 z-10">
@@ -366,20 +365,16 @@ export function SleepPositionLog({ currentPosition }: SleepPositionLogProps) {
                 </div>
               </div>
             ))}
-
             <div className="flex justify-center pt-2">
-              <Button
-                variant="outline" size="sm"
-                className="rounded-xl text-xs font-bold"
+              <Button variant="outline" size="sm" className="rounded-xl text-xs font-bold"
                 disabled={isFetching || (data?.rows?.length ?? 0) < PAGE}
-                onClick={() => setOffset(o => o + PAGE)}
-              >
+                onClick={() => setOffset(o => o + PAGE)}>
                 {isFetching ? "Loading…" : (data?.rows?.length ?? 0) < PAGE ? "All caught up" : "Load more"}
               </Button>
             </div>
-          </div>
+          </>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }

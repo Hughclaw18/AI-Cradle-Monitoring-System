@@ -14,7 +14,6 @@ import { useQuery } from "@tanstack/react-query";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, Package, Thermometer, ChevronDown, Download, AlertTriangle } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -337,7 +336,7 @@ export function EventLog({ liveEvents }: EventLogProps) {
       </div>
 
       {/* ── Timeline ── */}
-      <ScrollArea className="h-[480px] pr-1">
+      <div className="min-h-0">
         {groups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-2">
             <Package className="h-8 w-8 opacity-20" />
@@ -347,15 +346,11 @@ export function EventLog({ liveEvents }: EventLogProps) {
           <div className="space-y-6 pb-4">
             {groups.map(({ label, date, events: dayEvents }) => (
               <div key={date} id={`day-${date}`}>
-                {/* Day separator */}
                 <div className="flex items-center gap-3 mb-3 sticky top-0 bg-background/80 backdrop-blur py-1 z-10">
                   <div className="h-px flex-1 bg-border/50" />
-                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest shrink-0">
-                    {label}
-                  </span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest shrink-0">{label}</span>
                   <div className="h-px flex-1 bg-border/50" />
                 </div>
-
                 <div className="space-y-2">
                   {dayEvents.map((event, i) => (
                     <EventRow key={event.id} event={event} index={i} />
@@ -363,22 +358,16 @@ export function EventLog({ liveEvents }: EventLogProps) {
                 </div>
               </div>
             ))}
-
-            {/* Load more */}
             <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl text-xs font-bold"
+              <Button variant="outline" size="sm" className="rounded-xl text-xs font-bold"
                 disabled={isFetching || (data?.rows?.length ?? 0) < PAGE}
-                onClick={() => setOffset(o => o + PAGE)}
-              >
+                onClick={() => setOffset(o => o + PAGE)}>
                 {isFetching ? "Loading…" : (data?.rows?.length ?? 0) < PAGE ? "All caught up" : "Load more"}
               </Button>
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }

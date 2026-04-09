@@ -125,7 +125,7 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-4">
         {/* Camera Management */}
         <WebcamManager />

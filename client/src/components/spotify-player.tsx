@@ -212,52 +212,39 @@ const { data: devices, refetch: refetchDevices, isFetching: devicesLoading } = u
         </div>
 
         {/* Playback Controls */}
-        <div className="flex justify-center items-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => previousMutation.mutate()}
-            disabled={!musicStatus?.spotifyPlaylistId}
-          >
-            <SkipBack className="h-4 w-4" />
+        <div className="flex justify-center items-center gap-4">
+          <Button variant="ghost" size="icon" className="h-12 w-12"
+            onClick={() => previousMutation.mutate()} disabled={!musicStatus?.spotifyPlaylistId}>
+            <SkipBack className="h-5 w-5" />
           </Button>
-          <Button
-            data-testid="button-spotify-play-pause"
-            onClick={handlePlayPause}
+          <Button data-testid="button-spotify-play-pause" onClick={handlePlayPause}
             disabled={isLoading || !musicStatus?.spotifyPlaylistId}
-            size="lg"
-            className="w-20 h-20 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-gray-400 mx-2"
-          >
-            {isLoading ? (
-              <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full" />
-            ) : musicStatus?.isPlaying ? (
-              <Pause className="h-8 w-8 text-white" />
-            ) : (
-              <Play className="h-8 w-8 text-white ml-1" />
-            )}
+            className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-muted">
+            {isLoading
+              ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+              : musicStatus?.isPlaying
+                ? <Pause className="h-6 w-6 text-white" />
+                : <Play className="h-6 w-6 text-white ml-0.5" />
+            }
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => nextMutation.mutate()}
-            disabled={!musicStatus?.spotifyPlaylistId}
-          >
-            <SkipForward className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-12 w-12"
+            onClick={() => nextMutation.mutate()} disabled={!musicStatus?.spotifyPlaylistId}>
+            <SkipForward className="h-5 w-5" />
           </Button>
         </div>
-        
+
         {/* Device Selection */}
         {musicStatus?.spotifyConnected && (
-          <div className="flex flex-col items-center space-y-2 pt-4 w-full">
-            <div className="flex items-center gap-3">
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-muted-foreground">Playback Device</label>
               <Button variant="outline" size="sm" onClick={() => refetchDevices()} disabled={devicesLoading}>
-                {devicesLoading ? "Refreshing..." : "Refresh"}
+                {devicesLoading ? "Refreshing…" : "Refresh"}
               </Button>
             </div>
             {devices && devices.length > 0 ? (
               <Select onValueChange={setSelectedDeviceId} value={selectedDeviceId}>
-                <SelectTrigger className="w-[220px]">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select device" />
                 </SelectTrigger>
                 <SelectContent>
@@ -269,9 +256,9 @@ const { data: devices, refetch: refetchDevices, isFetching: devicesLoading } = u
                 </SelectContent>
               </Select>
             ) : (
-              <div className="text-xs text-muted-foreground text-center">
+              <p className="text-xs text-muted-foreground text-center py-2">
                 No devices found. Open Spotify on a device and click Refresh.
-              </div>
+              </p>
             )}
           </div>
         )}

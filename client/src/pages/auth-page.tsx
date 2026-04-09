@@ -4,138 +4,119 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertUserSchema } from "@shared/schema";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Baby } from "lucide-react";
+import type { InsertUser } from "@shared/schema";
 
 export default function AuthPage() {
-  const { user, loginMutation, registerMutation } = useAuth();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    if (user) {
-      setLocation("/");
-    }
-  }, [user, setLocation]);
-
-  if (user) {
-    return null;
-  }
+  useEffect(() => { if (user) setLocation("/"); }, [user, setLocation]);
+  if (user) return null;
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      <div className="flex flex-col items-center justify-center p-4 lg:p-8">
-        <div className="mb-8 text-center lg:hidden">
-          <h1 className="text-3xl font-bold text-primary">Smart Cradle</h1>
-          <p className="text-muted-foreground">Monitor System</p>
+    <div className="min-h-screen flex flex-col lg:grid lg:grid-cols-2 bg-background">
+      {/* Mobile header */}
+      <div className="lg:hidden flex items-center justify-center gap-3 pt-10 pb-4 px-4">
+        <div className="p-2.5 bg-primary/10 rounded-2xl">
+          <Baby className="h-7 w-7 text-primary" />
         </div>
+        <div>
+          <h1 className="text-2xl font-bold text-primary leading-none">Smart Cradle</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Nursery Intelligence System</p>
+        </div>
+      </div>
 
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-            <CardDescription>
-              Sign in to your Smart Cradle Monitor account
-            </CardDescription>
+      {/* Form panel */}
+      <div className="flex-1 flex flex-col items-center justify-start lg:justify-center px-4 pb-8 lg:p-8">
+        <Card className="w-full max-w-sm lg:max-w-md shadow-xl border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xl font-bold">Welcome back</CardTitle>
+            <CardDescription className="text-sm">Sign in to your Smart Cradle account</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-2 mb-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
               </TabsList>
-              
-              <TabsContent value="login">
-                <LoginForm />
-              </TabsContent>
-              
-              <TabsContent value="register">
-                <RegisterForm />
-              </TabsContent>
+              <TabsContent value="login"><LoginForm /></TabsContent>
+              <TabsContent value="register"><RegisterForm /></TabsContent>
             </Tabs>
           </CardContent>
         </Card>
       </div>
-      <div className="hidden lg:flex flex-col justify-center p-12 bg-muted text-foreground">
-        <div className="max-w-md mx-auto space-y-4">
-          <h1 className="text-4xl font-bold">Smart Cradle Monitor</h1>
-          <p className="text-lg text-muted-foreground">
-            Monitor your baby's sleep, track patterns, and get instant alerts
-            with our advanced monitoring system.
+
+      {/* Desktop hero panel */}
+      <div className="hidden lg:flex flex-col justify-center p-12 bg-primary/5 border-l border-border/30">
+        <div className="max-w-md space-y-4">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-primary/10 rounded-2xl">
+              <Baby className="h-8 w-8 text-primary" />
+            </div>
+            <h1 className="text-3xl font-bold">Smart Cradle Monitor</h1>
+          </div>
+          <p className="text-muted-foreground leading-relaxed">
+            Monitor your baby's sleep, track patterns, and get instant alerts with our advanced AI monitoring system.
           </p>
+          {[
+            "Real-time posture & object detection",
+            "Automatic crying detection & lullaby response",
+            "SMS alerts via Twilio",
+            "7-day sleep history & analytics",
+          ].map(f => (
+            <div key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+              {f}
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
+function PasswordInput({ field, show, onToggle }: { field: any; show: boolean; onToggle: () => void }) {
+  return (
+    <div className="relative">
+      <Input type={show ? "text" : "password"} {...field} className="pr-10" />
+      <button type="button" onClick={onToggle} tabIndex={-1}
+        className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+        aria-label={show ? "Hide password" : "Show password"}>
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 function LoginForm() {
   const { loginMutation } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const form = useForm({
-    defaultValues: { username: "", password: "" },
-  });
+  const [show, setShow] = useState(false);
+  const form = useForm({ defaultValues: { username: "", password: "" } });
 
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))}
-        className="space-y-4 mt-4"
-      >
-        <FormField
-          control={form.control}
-          name="username"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input type={showPassword ? "text" : "password"} {...field} className="pr-10" />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+      <form onSubmit={form.handleSubmit(d => loginMutation.mutate(d))} className="space-y-3 mt-3">
+        <FormField control={form.control} name="username" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Username</FormLabel>
+            <FormControl><Input {...field} autoComplete="username" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="password" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Password</FormLabel>
+            <FormControl><PasswordInput field={field} show={show} onToggle={() => setShow(v => !v)} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <Button type="submit" className="w-full h-11 mt-1" disabled={loginMutation.isPending}>
           {loginMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Login
         </Button>
@@ -146,116 +127,40 @@ function LoginForm() {
 
 function RegisterForm() {
   const { registerMutation } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const form = useForm({
+  const [show, setShow] = useState(false);
+  const form = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
     defaultValues: { username: "", password: "", name: "", address: "", email: "", phone: "" },
   });
 
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit((data) => registerMutation.mutate(data))}
-        className="space-y-4 mt-4"
-      >
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
+      <form onSubmit={form.handleSubmit(d => registerMutation.mutate(d))} className="space-y-3 mt-3">
+        {[
+          { name: "name" as const,     label: "Full Name", type: "text" },
+          { name: "username" as const, label: "Username",  type: "text" },
+          { name: "email" as const,    label: "Email",     type: "email" },
+          { name: "phone" as const,    label: "Phone",     type: "tel" },
+          { name: "address" as const,  label: "Address",   type: "text" },
+        ].map(({ name, label, type }) => (
+          <FormField key={name} control={form.control} name={name} render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Name</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
+              <FormLabel>{label}</FormLabel>
+              <FormControl><Input type={type} {...field} value={field.value ?? ""} /></FormControl>
               <FormMessage />
             </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="username"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Username</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input type="email" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="phone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Phone</FormLabel>
-              <FormControl>
-                <Input type="tel" {...field} value={field.value || ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Address</FormLabel>
-              <FormControl>
-                <Input {...field} value={field.value || ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input type={showPassword ? "text" : "password"} {...field} className="pr-10" />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={registerMutation.isPending}
-        >
-          {registerMutation.isPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Register
+          )} />
+        ))}
+        <FormField control={form.control} name="password" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Password</FormLabel>
+            <FormControl><PasswordInput field={field} show={show} onToggle={() => setShow(v => !v)} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <Button type="submit" className="w-full h-11 mt-1" disabled={registerMutation.isPending}>
+          {registerMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Create account
         </Button>
       </form>
     </Form>
