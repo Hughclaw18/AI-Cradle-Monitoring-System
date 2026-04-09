@@ -36,28 +36,18 @@ export function SpotifyConnect() {
 
   const setPlaylistMutation = useMutation({
     mutationFn: async (playlist: Playlist) => {
-      console.log("Attempting to set playlist:", playlist);
       return apiRequest("POST", "/api/spotify/playlist", {
         playlistId: playlist.id,
         playlistName: playlist.name,
       });
     },
     onSuccess: () => {
-      console.log("Playlist set successfully!");
       queryClient.invalidateQueries({ queryKey: ["/api/spotify/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/music/status"] });
-      toast({
-        title: "Playlist set",
-        description: "Your Spotify playlist has been connected successfully",
-      });
+      toast({ title: "Playlist connected", description: "Music will play automatically when baby cries." });
     },
-    onError: (error) => {
-      console.error("Failed to set playlist:", error);
-      toast({
-        title: "Error",
-        description: "Failed to set playlist",
-        variant: "destructive",
-      });
+    onError: () => {
+      toast({ title: "Couldn't set playlist", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -138,7 +128,6 @@ export function SpotifyConnect() {
                   key={playlist.id}
                   data-testid={`playlist-${playlist.id}`}
                   onClick={() => {
-                    console.log("Selected playlist:", playlist);
                     setSelectedPlaylist(playlist.id);
                     setPlaylistMutation.mutate(playlist);
                   }}

@@ -2,17 +2,107 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, MessageSquare, CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { SystemSettings } from "@shared/schema";
 import { WebcamManager } from "./webcam-manager";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"; // Import Accordion components
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
 
-interface SettingsPanelProps {
+interface SmsStatus {
+  sms: { configured: boolean; clientReady: boolean; usingMessagingService: boolean; fromConfigured: boolean };
+  targetPhone: string | null;
+  pushNotifications: boolean;
+}
+
+function SmsStatusCard() {
+  const { toast } = useToast();
+
+  const { data, isLoading } = useQuery<SmsStatus>({
+    queryKey: ["/api/notifications/status"],
+    staleTime: 60_000,
+  });
+
+  const testSmsMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/notifications/test-sms"),
+    onSuccess: () => toast({ title: "Test SMS sent", description: `Message sent to ${data?.targetPhone ?? "your number"}.` }),
+    onError: (e: Error) => toast({ title: "Couldn't send test SMS", description: e.message, variant: "destructive" }),
+  });
+
+  const configured = data?.sms?.configured ?? false;
+  const phone = data?.targetPhone;
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          <h3 className="font-medium text-foreground">SMS Alerts (Twilio)</h3>
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Checking status…
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {/* Configured status */}
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium">Twilio</span>
+              <div className="flex items-center gap-1.5">
+                {configured
+                  ? <><CheckCircle2 className="h-4 w-4 text-green-500" /><span className="text-xs text-green-600 font-bold">Ready</span></>
+                  : <><XCircle className="h-4 w-4 text-destructive" /><span className="text-xs text-destructive font-bold">Not configured</span></>
+                }
+              </div>
+            </div>
+
+            {/* Target phone */}
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium">Alerts sent to</span>
+              <span className="text-xs font-mono text-muted-foreground">
+                {phone ?? <span className="text-destructive">No phone on profile</span>}
+              </span>
+            </div>
+
+            {/* Push notifications toggle status */}
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium">SMS enabled</span>
+              {data?.pushNotifications
+                ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                : <XCircle className="h-4 w-4 text-muted-foreground" />
+              }
+            </div>
+
+            {/* Test button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 rounded-xl"
+              disabled={!configured || !phone || testSmsMutation.isPending}
+              onClick={() => testSmsMutation.mutate()}
+            >
+              {testSmsMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Send className="h-4 w-4" />
+              }
+              Send test SMS
+            </Button>
+
+            {!phone && (
+              <p className="text-[11px] text-muted-foreground text-center">
+                Add a phone number to your profile to receive SMS alerts.
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
   settings: SystemSettings;
   onUpdateSettings: (settings: Partial<SystemSettings>) => void;
   onReconnect: () => void;
@@ -199,6 +289,9 @@ export function SettingsPanel({ settings, onUpdateSettings, onReconnect }: Setti
             </AccordionContent>
           </AccordionItem>
         </Accordion>
+
+        {/* SMS / Twilio Status */}
+        <SmsStatusCard />
 
         {/* System Info */}
         <Card>

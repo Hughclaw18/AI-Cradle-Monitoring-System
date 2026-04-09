@@ -20,8 +20,6 @@ export function SpotifyPlayer({ musicStatus }: SpotifyPlayerProps) {
   const queryClient = useQueryClient();
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
   const { toast } = useToast();
-
-  console.log("Music Status in SpotifyPlayer:", musicStatus);
   // Fetch available Spotify devices
   interface UserDevice {
   id: string;
@@ -47,7 +45,6 @@ const { data: devices, refetch: refetchDevices, isFetching: devicesLoading } = u
   // Mutation to play music
   const playMutation = useMutation({
     mutationFn: () => {
-      console.log("Sending play request with deviceId:", selectedDeviceId);
       return apiRequest("POST", "/api/spotify/player", {
         action: "play",
         deviceId: selectedDeviceId,
@@ -55,97 +52,62 @@ const { data: devices, refetch: refetchDevices, isFetching: devicesLoading } = u
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Spotify Playback",
-        description: "Playing Spotify music.",
-      });
+      toast({ title: "Now playing", description: musicStatus?.spotifyPlaylistName ?? "Spotify" });
       queryClient.invalidateQueries({ queryKey: ["musicStatus"] });
     },
-    onError: (error) => {
-      console.error("Failed to play Spotify playback:", error);
-      toast({
-        title: "Spotify Playback Failed",
-        description: `Failed to play Spotify playback: ${error.message}`,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Couldn't start playback", description: error.message, variant: "destructive" });
     },
   });
 
   // Mutation to pause music
   const pauseMutation = useMutation({
     mutationFn: () => {
-      console.log("Sending pause request with deviceId:", selectedDeviceId);
       return apiRequest("POST", "/api/spotify/player", {
         action: "pause",
         deviceId: selectedDeviceId,
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Spotify Playback",
-        description: "Paused Spotify music.",
-      });
+      toast({ title: "Paused" });
       queryClient.invalidateQueries({ queryKey: ["musicStatus"] });
     },
-    onError: (error) => {
-      console.error("Failed to pause Spotify playback:", error);
-      toast({
-        title: "Spotify Playback Failed",
-        description: `Failed to pause Spotify playback: ${error.message}`,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Couldn't pause playback", description: error.message, variant: "destructive" });
     },
   });
 
   // Mutation to skip to the next track
   const nextMutation = useMutation({
     mutationFn: () => {
-      console.log("Sending next request with deviceId:", selectedDeviceId);
       return apiRequest("POST", "/api/spotify/player", {
         action: "next",
         deviceId: selectedDeviceId,
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Spotify Playback",
-        description: "Skipped to next track.",
-      });
+      toast({ title: "Skipped to next track" });
       queryClient.invalidateQueries({ queryKey: ["musicStatus"] });
     },
-    onError: (error) => {
-      console.error("Failed to skip to next track:", error);
-      toast({
-        title: "Spotify Playback Failed",
-        description: `Failed to skip to next track: ${error.message}`,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Couldn't skip track", description: error.message, variant: "destructive" });
     },
   });
 
   // Mutation to go to the previous track
   const previousMutation = useMutation({
     mutationFn: () => {
-      console.log("Sending previous request with deviceId:", selectedDeviceId);
       return apiRequest("POST", "/api/spotify/player", {
         action: "previous",
         deviceId: selectedDeviceId,
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Spotify Playback",
-        description: "Skipped to previous track.",
-      });
+      toast({ title: "Back to previous track" });
       queryClient.invalidateQueries({ queryKey: ["musicStatus"] });
     },
-    onError: (error) => {
-      console.error("Failed to skip to previous track:", error);
-      toast({
-        title: "Spotify Playback Failed",
-        description: `Failed to skip to previous track: ${error.message}`,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Couldn't go back", description: error.message, variant: "destructive" });
     },
   });
 

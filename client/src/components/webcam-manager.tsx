@@ -25,8 +25,8 @@ export function WebcamManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/webcams"] });
       toast({ title: "Camera removed" });
     },
-    onError: (err: Error) => {
-      toast({ title: "Failed to remove camera", description: err.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: "Couldn't remove camera", description: "Please try again.", variant: "destructive" });
     }
   });
 
@@ -95,8 +95,8 @@ function AddWebcamDialog() {
       setUrl("");
       toast({ title: "Camera added" });
     },
-    onError: (err: Error) => {
-      toast({ title: "Failed to add camera", description: err.message, variant: "destructive" });
+    onError: () => {
+      toast({ title: "Couldn't add camera", description: "Check the URL and try again.", variant: "destructive" });
     }
   });
 
