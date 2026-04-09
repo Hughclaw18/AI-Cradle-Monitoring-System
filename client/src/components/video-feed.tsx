@@ -15,7 +15,13 @@ export function VideoFeed({ settings }: VideoFeedProps) {
   const [selectedWebcamId, setSelectedWebcamId] = useState<string>("simulator_ws");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const { videoFrame, connected } = useWebSocket();
+  // Key bumped when user switches back to simulator channel to force <img> reload
+  const [mjpegKey, setMjpegKey] = useState(0);
+  const { connected } = useWebSocket();
+
+  useEffect(() => {
+    if (selectedWebcamId === "simulator_ws") setMjpegKey(k => k + 1);
+  }, [selectedWebcamId]);
 
   const { data: webcams } = useQuery<Webcam[]>({
     queryKey: ["/api/webcams"],
@@ -79,28 +85,21 @@ export function VideoFeed({ settings }: VideoFeedProps) {
                />
              )
           ) : selectedWebcamId === "simulator_ws" ? (
-             videoFrame ? (
-                <motion.img 
-                  key="simulator"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  src={`data:image/jpeg;base64,${videoFrame}`} 
-                  alt="Simulator Feed" 
-                  className="w-full h-full object-cover" 
-                />
-             ) : (
-                <motion.div 
-                  key="loading"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute inset-0 flex flex-col items-center justify-center text-white bg-neutral-900"
-                >
-                  <div className="relative mb-6">
-                    <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-                    <Zap className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                  </div>
-                  <div className="text-xs font-bold uppercase tracking-[0.3em] animate-pulse text-primary">Awaiting Link</div>
-                  <div className="text-[10px] opacity-40 mt-2 font-medium">ENCRYPTED DATA STREAM</div>
-                </motion.div>
-             )
+             <motion.div key="simulator" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
+               <img
+                 key={mjpegKey}
+                 src="/api/stream/live"
+                 alt="Simulator Live Feed"
+                 className="w-full h-full object-cover"
+                 onError={() => setStreamError("Stream unavailable — start the simulator and upload a video.")}
+               />
+               {streamError && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-neutral-900/80 p-4 text-center">
+                   <Zap className="h-10 w-10 text-primary mb-3" />
+                   <span className="text-xs font-bold uppercase tracking-widest">{streamError}</span>
+                 </div>
+               )}
+             </motion.div>
           ) : selectedWebcam ? (
              <motion.div key="cam" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
                {selectedWebcam.type === 'mjpeg' ? (

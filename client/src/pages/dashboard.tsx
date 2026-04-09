@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
-import { Bell, Settings, Baby, Play, Square, ChevronDown, History, LayoutDashboard, LogOut, User as UserIcon, Footprints, Volume2, Thermometer } from "lucide-react";
+import { Bell, Settings, Baby, Play, Square, History, LayoutDashboard, LogOut, User as UserIcon, Volume2, Thermometer, BedDouble } from "lucide-react";
 import { getTimeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorCard } from "@/components/sensor-card";
 import { SpotifyPlayer } from "@/components/spotify-player";
 import { SpotifyConnect } from "@/components/spotify-connect";
-import { DetectionList } from "@/components/detection-list"; // Import the new component
-// import Detections from "@/components/detection-history";
-import DetectionGraph from "@/components/DetectionGraph";
+import { DetectionList } from "@/components/detection-list";
+import { EventLog, type LogEvent } from "@/components/event-log";
+import { SleepPositionLog } from "@/components/sleep-position-log";
 import { SettingsPanel } from "@/components/settings-panel";
 import { NotificationToast } from "@/components/notification-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -34,12 +33,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { pulsingOpacity, emergencyButtonAnimation } from "@/lib/animations"; // Import variants
-
-interface DetectionEvent {
-  type: 'crying' | 'object' | 'temperature';
-  timestamp: Date;
-  details?: string;
-}
 
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
@@ -70,47 +63,33 @@ export default function Dashboard() {
     enableLocalWebcam: false,
     motionAlerts: false,
   };
-  const [detections, setDetections] = useState<DetectionEvent[]>([]);
+  const [detections, setDetections] = useState<LogEvent[]>([]);
 
   useEffect(() => {
     if (sensorData) {
-      const newDetections: DetectionEvent[] = [];
+      const HAZARDOUS = new Set(["knife","scissors","lighter","coin","battery","pin","nail","glass","medicine","plastic_bag","small_marble","sharp_toy","hot_liquid","insect"]);
+      const newDetections: LogEvent[] = [];
+      const ts = new Date(sensorData.timestamp);
 
       if (sensorData.cryingDetected) {
-        newDetections.push({
-          type: 'crying',
-          timestamp: new Date(sensorData.timestamp),
-          details: 'Crying detected',
-        });
+        newDetections.push({ id: `cry-live-${ts.getTime()}`, type: "crying", timestamp: ts, detail: "Crying detected", severity: "warning" });
       }
 
       const objs = Array.isArray(sensorData.objectDetected) ? sensorData.objectDetected : [];
-      if (objs.length > 0) {
-        objs.forEach(obj => {
-          newDetections.push({
-            type: 'object',
-            timestamp: new Date(obj.timestamp),
-            details: `Object detected: ${obj.object_name}`,
-          });
-        });
-      }
+      objs.forEach(obj => {
+        const isHazard = HAZARDOUS.has(obj.object_name?.toLowerCase());
+        newDetections.push({ id: `obj-live-${ts.getTime()}-${obj.object_name}`, type: "object", timestamp: new Date(obj.timestamp ?? ts), detail: obj.object_name, severity: isHazard ? "danger" : "info" });
+      });
 
       if (sensorData.temperature > (settings?.tempThreshold || 78)) {
-        newDetections.push({
-          type: 'temperature',
-          timestamp: new Date(sensorData.timestamp),
-          details: `High temperature detected: ${sensorData.temperature}°F`,
-        });
+        newDetections.push({ id: `temp-live-${ts.getTime()}`, type: "temperature", timestamp: ts, detail: `${sensorData.temperature.toFixed(1)}°F`, severity: sensorData.temperature > 85 ? "danger" : "warning" });
       }
 
       if (newDetections.length > 0) {
-        setDetections(prevDetections => {
-          const uniqueNewDetections = newDetections.filter(
-            newDet => !prevDetections.some(
-              prevDet => prevDet.type === newDet.type && prevDet.timestamp.getTime() === newDet.timestamp.getTime()
-            )
-          );
-          return [...prevDetections, ...uniqueNewDetections].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        setDetections(prev => {
+          const existingIds = new Set(prev.map(e => e.id));
+          const fresh = newDetections.filter(e => !existingIds.has(e.id));
+          return [...fresh, ...prev].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         });
       }
     }
@@ -325,7 +304,7 @@ export default function Dashboard() {
         {/* Main Content */}
         <main className="p-4 md:p-8 pb-32 lg:pb-8">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="hidden lg:grid w-full grid-cols-4 h-16 p-1.5 bg-muted/50 backdrop-blur rounded-2xl mb-8">
+            <TabsList className="hidden lg:grid w-full grid-cols-5 h-16 p-1.5 bg-muted/50 backdrop-blur rounded-2xl mb-8">
               <TabsTrigger value="dashboard" className="rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-lg transition-all duration-300">
                 <div className="flex flex-col items-center">
                   <LayoutDashboard className="h-5 w-5 mb-1" />
@@ -342,6 +321,12 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center">
                   <History className="h-5 w-5 mb-1" />
                   <span className="text-[10px] font-bold uppercase tracking-tighter">Log</span>
+                </div>
+              </TabsTrigger>
+              <TabsTrigger value="sleep" className="rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-lg transition-all duration-300">
+                <div className="flex flex-col items-center">
+                  <BedDouble className="h-5 w-5 mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-tighter">Sleep</span>
                 </div>
               </TabsTrigger>
               <TabsTrigger value="settings" className="rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-lg transition-all duration-300">
@@ -465,46 +450,11 @@ export default function Dashboard() {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Object Detections */}
-              <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-green-500/10 rounded-xl">
-                      <Footprints className="h-5 w-5 text-green-500" />
-                    </div>
-                    <h3 className="font-bold text-lg text-foreground tracking-tight">Object Events</h3>
-                  </div>
-                  <DetectionList detections={detections?.filter(d => d.type === 'object')} emptyMessage="No objects detected." />
-                </CardContent>
-              </Card>
+            <EventLog liveEvents={detections} />
+          </TabsContent>
 
-              {/* Crying Detections */}
-              <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-amber-500/10 rounded-xl">
-                      <Volume2 className="h-5 w-5 text-amber-500" />
-                    </div>
-                    <h3 className="font-bold text-lg text-foreground tracking-tight">Audio Events</h3>
-                  </div>
-                  <DetectionList detections={detections?.filter(d => d.type === 'crying')} emptyMessage="No crying events recorded." />
-                </CardContent>
-              </Card>
-
-              {/* Temperature Alerts */}
-              <Card className="rounded-3xl border-none shadow-xl bg-card/50 backdrop-blur overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-destructive/10 rounded-xl">
-                      <Thermometer className="h-5 w-5 text-destructive" />
-                    </div>
-                    <h3 className="font-bold text-lg text-foreground tracking-tight">System Alerts</h3>
-                  </div>
-                  <DetectionList detections={detections?.filter(d => d.type === 'temperature')} emptyMessage="No temperature alerts." />
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="sleep" className="mt-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <SleepPositionLog currentPosition={(sensorData as any)?.sleepingPosition} />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4 mt-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -544,6 +494,7 @@ export default function Dashboard() {
             { id: "dashboard", icon: LayoutDashboard, label: "Live" },
             { id: "music", icon: Play, label: "Media" },
             { id: "history", icon: History, label: "Log" },
+            { id: "sleep", icon: BedDouble, label: "Sleep" },
             { id: "settings", icon: Settings, label: "Config" },
           ].map((item) => (
             <button

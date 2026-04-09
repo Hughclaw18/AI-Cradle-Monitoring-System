@@ -10,7 +10,7 @@ import {
   users, webcams, spotifyConfig, sensorData, servoStatus, musicStatus, systemSettings, tracks
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte, sql as drizzleSql } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -37,6 +37,9 @@ export interface IStorage {
   // Sensor data
   insertSensorData(data: InsertSensorData): Promise<SensorData>;
   getLatestSensorData(userId?: number): Promise<SensorData | undefined>;
+  getSensorHistory(userId: number, limit: number, offset: number): Promise<SensorData[]>;
+  getSensorSummary(userId: number): Promise<{ date: string; crying: number; objects: number; temperature: number; positions: Record<string, number> }[]>;
+  getSleepPositionHistory(userId: number, limit: number, offset: number): Promise<{ id: number; timestamp: Date; sleepingPosition: string | null }[]>;
   
   // Servo status
   insertServoStatus(status: InsertServoStatus): Promise<ServoStatus>;
@@ -152,6 +155,58 @@ export class DatabaseStorage implements IStorage {
     }
     const [latest] = await db.select().from(sensorData).orderBy(desc(sensorData.timestamp)).limit(1);
     return latest;
+  }
+
+  async getSensorHistory(userId: number, limit: number, offset: number): Promise<SensorData[]> {
+    return db
+      .select()
+      .from(sensorData)
+      .where(eq(sensorData.userId, userId))
+      .orderBy(desc(sensorData.timestamp))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getSensorSummary(userId: number): Promise<{ date: string; crying: number; objects: number; temperature: number; positions: Record<string, number> }[]> {
+    const since = new Date();
+    since.setDate(since.getDate() - 6);
+    since.setHours(0, 0, 0, 0);
+
+    const rows = await db
+      .select()
+      .from(sensorData)
+      .where(and(eq(sensorData.userId, userId), gte(sensorData.timestamp, since)))
+      .orderBy(desc(sensorData.timestamp));
+
+    const byDay: Record<string, { date: string; crying: number; objects: number; temperature: number; positions: Record<string, number> }> = {};
+    for (const row of rows) {
+      const day = row.timestamp.toISOString().slice(0, 10);
+      if (!byDay[day]) byDay[day] = { date: day, crying: 0, objects: 0, temperature: 0, positions: {} };
+      if (row.cryingDetected) byDay[day].crying += 1;
+      const objs = Array.isArray(row.objectDetected) ? row.objectDetected : [];
+      byDay[day].objects += objs.length;
+      if (row.temperature > 78) byDay[day].temperature += 1;
+      const pos = (row as any).sleepingPosition || "Unknown";
+      if (pos && pos !== "Unknown") {
+        byDay[day].positions[pos] = (byDay[day].positions[pos] || 0) + 1;
+      }
+    }
+    return Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async getSleepPositionHistory(userId: number, limit: number, offset: number): Promise<{ id: number; timestamp: Date; sleepingPosition: string | null }[]> {
+    const rows = await db
+      .select()
+      .from(sensorData)
+      .where(eq(sensorData.userId, userId))
+      .orderBy(desc(sensorData.timestamp))
+      .limit(limit)
+      .offset(offset);
+    return rows.map(r => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      sleepingPosition: (r as any).sleepingPosition ?? null,
+    }));
   }
 
   // Servo Status

@@ -162,6 +162,35 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
+  // Get paginated sensor history + 7-day summary
+  app.get("/api/sensors/history", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    try {
+      const rows = await storage.getSensorHistory(userId, limit, offset);
+      const summary = await storage.getSensorSummary(userId);
+      res.json({ rows, summary, limit, offset });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get sensor history" });
+    }
+  });
+
+  // Get paginated sleep position history
+  app.get("/api/sensors/sleep-positions", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    const limit  = Math.min(parseInt(req.query.limit  as string) || 100, 500);
+    const offset = parseInt(req.query.offset as string) || 0;
+    try {
+      const rows = await storage.getSleepPositionHistory(userId, limit, offset);
+      res.json({ rows, limit, offset });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get sleep position history" });
+    }
+  });
+
   // --- Notification Diagnostics & Test ---
   app.get("/api/notifications/status", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -608,6 +637,79 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
+  // --- MJPEG Simulator Stream ---
+  // Per-user latest JPEG frame buffer + list of SSE/MJPEG response objects
+  const mjpegFrames = new Map<number, Buffer>();
+  const mjpegClients = new Map<number, Set<Response>>();
+
+  // Simulator pushes a raw JPEG frame here (multipart/form-data field "frame")
+  // Auth: session cookie OR x-simulator-token header (same as WebSocket)
+  app.post("/api/stream/frame", (req, res) => {
+    const simulatorToken = req.headers['x-simulator-token'];
+    const expectedToken = process.env.SIMULATOR_TOKEN || 'default-simulator-token';
+    let userId: number | null = null;
+
+    if ((req as any).isAuthenticated?.()) {
+      userId = (req.user as any).id;
+    } else if (simulatorToken === expectedToken) {
+      userId = 1; // simulator user
+    }
+
+    if (!userId) return res.sendStatus(401);
+
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const body = Buffer.concat(chunks);
+      // Body is raw JPEG bytes sent with Content-Type: image/jpeg
+      mjpegFrames.set(userId!, body);
+
+      // Push to all connected MJPEG viewers for this user
+      const viewers = mjpegClients.get(userId!) ?? new Set();
+      const boundary = '--mjpegboundary';
+      const header = Buffer.from(
+        `${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${body.length}\r\n\r\n`
+      );
+      const tail = Buffer.from('\r\n');
+      const packet = Buffer.concat([header, body, tail]);
+      Array.from(viewers).forEach(viewer => {
+        try { (viewer as any).write(packet); } catch { viewers.delete(viewer); }
+      });
+      res.sendStatus(204);
+    });
+    req.on('error', () => res.sendStatus(500));
+  });
+
+  // Client connects here to receive the MJPEG stream
+  app.get("/api/stream/live", (req, res) => {
+    if (!(req as any).isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+
+    res.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=mjpegboundary',
+      'Cache-Control': 'no-cache, no-store',
+      'Connection': 'keep-alive',
+      'Pragma': 'no-cache',
+    });
+
+    if (!mjpegClients.has(userId)) mjpegClients.set(userId, new Set());
+    mjpegClients.get(userId)!.add(res as any);
+
+    // Send the last known frame immediately so the client doesn't see a blank screen
+    const lastFrame = mjpegFrames.get(userId);
+    if (lastFrame) {
+      const boundary = '--mjpegboundary';
+      const header = Buffer.from(
+        `${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${lastFrame.length}\r\n\r\n`
+      );
+      try { res.write(Buffer.concat([header, lastFrame, Buffer.from('\r\n')])); } catch { /* ignore */ }
+    }
+
+    req.on('close', () => {
+      mjpegClients.get(userId)?.delete(res as any);
+    });
+  });
+
   // --- WebSocket Server ---
 
   // Map userId to Set of WebSockets
@@ -709,6 +811,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           if (toInsert.id !== undefined) delete toInsert.id;
           
           const toStore: any = { ...toInsert };
+          // Normalise sleepingPosition → camelCase field name matches schema
+          if (toStore.sleepingPosition === undefined && toStore.sleeping_position !== undefined) {
+            toStore.sleepingPosition = toStore.sleeping_position;
+          }
+          delete toStore.sleeping_position;
           if (toStore.objectDetected !== undefined && toStore.objectDetected !== null) {
             if (typeof toStore.objectDetected === 'string') {
               toStore.objectDetected = JSON.stringify([{ object_name: toStore.objectDetected, timestamp: new Date().toISOString() }]);

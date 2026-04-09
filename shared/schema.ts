@@ -53,6 +53,7 @@ export const sensorData = pgTable("sensor_data", {
     detection_id: string;
   }[] | null>(),
   cryingDetected: boolean("crying_detected").notNull().default(false),
+  sleepingPosition: text("sleeping_position").default("Unknown"),
 });
 
 export const servoStatus = pgTable("servo_status", {

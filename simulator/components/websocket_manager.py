@@ -90,14 +90,41 @@ def send_sensor_data(
 
 
 def send_video_frame(b64_frame: str) -> None:
-    """Send a base-64 encoded video frame over the WebSocket (best-effort)."""
-    if not ensure_ws_connection():
-        return
+    """Send a base-64 encoded video frame over the WebSocket (best-effort).
+    Falls back to MJPEG HTTP push if available."""
+    _push_mjpeg_frame_b64(b64_frame)
+
+
+def _push_mjpeg_frame_b64(b64_frame: str) -> None:
+    """Decode a base64 JPEG and push it to the backend MJPEG stream endpoint."""
+    import base64
+    import requests as _requests
+    from components.session import get_api_url
     try:
-        msg = json.dumps({"type": "video_frame", "data": b64_frame})
-        st.session_state.ws.send(msg)
+        jpeg_bytes = base64.b64decode(b64_frame)
+        api_url = get_api_url()
+        headers: dict = {"Content-Type": "image/jpeg"}
+        # Attach auth: prefer session cookies, fall back to simulator token
+        cookies = st.session_state.cookies
+        sim_token = st.session_state.sim_token
+        if cookies:
+            _requests.post(
+                f"{api_url}/stream/frame",
+                data=jpeg_bytes,
+                headers=headers,
+                cookies=cookies.get_dict(),
+                timeout=2,
+            )
+        else:
+            headers["x-simulator-token"] = sim_token
+            _requests.post(
+                f"{api_url}/stream/frame",
+                data=jpeg_bytes,
+                headers=headers,
+                timeout=2,
+            )
     except Exception:
-        pass  # Non-critical; drop silently for live video
+        pass  # Non-critical — drop silently
 
 
 # ── Private ───────────────────────────────────────────────────────────────────
