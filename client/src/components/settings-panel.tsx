@@ -103,6 +103,8 @@ function SmsStatusCard() {
     </Card>
   );
 }
+
+interface SettingsPanelProps {
   settings: SystemSettings;
   onUpdateSettings: (settings: Partial<SystemSettings>) => void;
   onReconnect: () => void;
