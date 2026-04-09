@@ -45,15 +45,14 @@ export function NotificationToast({ title, message, severity, onDismiss, duratio
 
   return (
     <motion.div
-      variants={fadeInSlideUp} // Use fadeInSlideUp variant
+      variants={fadeInSlideUp}
       initial="initial"
       animate="animate"
       exit="exit"
-      custom={{ yOffset: 50, scaleFactor: 0.9, xOffset: "-50%" }} // Pass custom props for specific animation
+      custom={{ yOffset: 50, scaleFactor: 0.9, xOffset: "-50%" }}
       className={cn(
-        "fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-md",
-        "md:bottom-8 md:right-8 md:left-auto md:-translate-x-0 md:max-w-xs",
-        "bg-background/80 backdrop-blur-2xl border-2 rounded-[2rem] p-5 shadow-2xl transition-all",
+        "w-full pointer-events-auto",
+        "bg-background/80 backdrop-blur-2xl border-2 rounded-[2rem] p-5 shadow-2xl",
         getBorderColor()
       )}
     >

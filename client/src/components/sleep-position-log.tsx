@@ -51,9 +51,15 @@ const SAFE_POSITIONS: Position[] = ["back", "side"];
 
 function normalise(raw: string | null | undefined): Position {
   const s = (raw ?? "").toLowerCase().trim();
-  if (s === "back" || s === "supine") return "back";
-  if (s === "side" || s === "lateral") return "side";
-  if (s === "stomach" || s === "prone") return "stomach";
+  if (!s || s === "unknown") return "unknown";
+  // Full sentence values from the YOLO posture model
+  if (s.includes("facing up") || s.includes("back") || s.includes("supine")) return "back";
+  if (s.includes("side") || s.includes("lateral")) return "side";
+  if (s.includes("stomach") || s.includes("prone") || s.includes("facing down")) return "stomach";
+  // Short keyword fallback
+  if (s === "back") return "back";
+  if (s === "side") return "side";
+  if (s === "stomach") return "stomach";
   return "unknown";
 }
 
