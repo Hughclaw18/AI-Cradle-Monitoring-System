@@ -1,6 +1,6 @@
 # Smart Cradle Monitor
 
-An AI-powered infant safety system that uses real-time computer vision (YOLOv11), environmental sensors, and automated responses to monitor baby sleep posture, detect hazards, and soothe the infant — all accessible from a modern web dashboard.
+An AI-powered infant safety system that uses real-time computer vision (YOLOv11, YOLOe, YAMNet), environmental sensors, and automated responses to monitor baby sleep posture, detect hazards, detect infant cry and soothe the infant — all accessible from a modern web dashboard.
 
 ---
 
@@ -22,7 +22,7 @@ An AI-powered infant safety system that uses real-time computer vision (YOLOv11)
 
 ## Features
 
-- **Real-time AI Detection** — YOLOv11s-seg for hazard detection + custom posture model for SIDS risk classification (Back / Side / Stomach)
+- **Real-time AI Detection** — YOLOe and YOLOv11s-seg for hazard detection + custom posture model for SIDS risk classification (Back / Side / Stomach)
 - **Live Video Feed** — Simulator streams MJPEG frames to the dashboard via a dedicated endpoint
 - **WebSocket Telemetry** — Sub-100ms sensor data broadcast to all connected clients
 - **Spotify Integration** — Auto-plays lullabies when crying is detected; full playback controls from the dashboard
@@ -72,6 +72,8 @@ SmartCradleMonitor/
 │   └── models/           # best.pt (posture model)
 ├── models/
 │   └── yoloe-11s-seg.pt  # Hazard detection model
+│   └── yolov-11s-seg.pt  # Posture detection model
+│   └── yamnet.pt  # Cry detection model
 └── scripts/              # DB seeding and utility scripts
 ```
 
@@ -81,8 +83,8 @@ SmartCradleMonitor/
 
 - **Node.js** v20+
 - **Python** 3.10+
-- **PostgreSQL** database (local or cloud — Railway provides one)
-- **Spotify Developer Account** (for music features)
+- **PostgreSQL** database (local — PGAdmin or cloud — Railway provides one)
+- **Spotify Developer Account** (for music features, only acessible to premium account holders)
 - **Twilio Account** (optional, for SMS alerts)
 
 ---
@@ -217,12 +219,12 @@ Push to your connected branch — Railway will build and deploy automatically.
 | `SPOTIFY_CLIENT_SECRET` | Yes* | Spotify app client secret |
 | `SPOTIFY_REDIRECT_URI` | Yes* | OAuth callback URL (must match Spotify dashboard) |
 | `SIMULATOR_TOKEN` | Yes | Shared secret between simulator and backend |
-| `TWILIO_ACCOUNT_SID` | No | Twilio account SID for SMS |
-| `TWILIO_AUTH_TOKEN` | No | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | No | Twilio sender phone number |
-| `TWILIO_MESSAGING_SERVICE_SID` | No | Twilio messaging service SID |
-| `PORT` | No | Server port (Railway sets this automatically) |
-| `NODE_ENV` | No | Set to `production` for Railway |
+| `TWILIO_ACCOUNT_SID` | No(Option) | Twilio account SID for SMS |
+| `TWILIO_AUTH_TOKEN` | No(Option) | Twilio auth token |
+| `TWILIO_PHONE_NUMBER` | No(Option) | Twilio sender phone number |
+| `TWILIO_MESSAGING_SERVICE_SID` | No(Option) | Twilio messaging service SID |
+| `PORT` | No(Option) | Server port (Railway sets this automatically) |
+| `NODE_ENV` | No(Option) | Set to `production` for Railway |
 
 *Required only if using Spotify integration.
 
