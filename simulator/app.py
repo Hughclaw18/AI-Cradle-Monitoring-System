@@ -18,7 +18,7 @@ from components.sidebar import render_sidebar
 from components.websocket_manager import ensure_ws_connection, is_connected
 
 # ── Tab component imports ─────────────────────────────────────────────────────
-from components.tabs import sensor_tab, image_tab, video_tab, audio_tab
+from components.tabs import sensor_tab, image_tab, video_tab, audio_tab, live_audio_tab
 
 # ── Model loader imports ──────────────────────────────────────────────────────
 from utils.model_loader import (
@@ -28,12 +28,12 @@ from utils.model_loader import (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Initialise session state (idempotent — safe to call on every rerun)
+# 1. Initialise session state
 # ─────────────────────────────────────────────────────────────────────────────
 init_session_state()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1b. Keep WebSocket alive — auto-reconnect on every rerun when logged in
+# 1b. Keep WebSocket alive
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.cookies and (
     st.session_state.ws is None or not st.session_state.ws.connected
@@ -41,12 +41,35 @@ if st.session_state.cookies and (
     ensure_ws_connection()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. Sidebar: connection settings + authentication
+# 2. Load models (cached — only runs once)
 # ─────────────────────────────────────────────────────────────────────────────
-render_sidebar()
+@st.cache_resource(show_spinner="Loading posture detection model…")
+def get_posture_model():
+    return load_posture_detection_model()
+
+@st.cache_resource(show_spinner="Loading object detection model…")
+def get_object_model():
+    return load_object_detection_model()
+
+@st.cache_resource(show_spinner="Loading cry detection model…")
+def get_cry_model():
+    return load_yamnet_model()
+
+posture_model          = get_posture_model()
+object_model           = get_object_model()
+cry_model, class_names = get_cry_model()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Page header with WebSocket status badge top-right
+# 3. Sidebar — pass loaded models so status shows there, not in main area
+# ─────────────────────────────────────────────────────────────────────────────
+render_sidebar(
+    posture_model=posture_model,
+    object_model=object_model,
+    cry_model=cry_model,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Page header
 # ─────────────────────────────────────────────────────────────────────────────
 _col_title, _col_ws = st.columns([8, 2])
 with _col_title:
@@ -66,33 +89,14 @@ with _col_ws:
 st.write("Use the tabs below to simulate sensor data, or analyse images, videos, and audio.")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. Cached model loaders (loaded once, shared across all tabs)
-# ─────────────────────────────────────────────────────────────────────────────
-@st.cache_resource
-def get_posture_model():
-    return load_posture_detection_model()
-
-@st.cache_resource
-def get_object_model():
-    return load_object_detection_model()
-
-@st.cache_resource
-def get_cry_model():
-    return load_yamnet_model()
-
-
-posture_model             = get_posture_model()
-object_model              = get_object_model()
-cry_model, class_names    = get_cry_model()
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. Main content — tabbed layout
 # ─────────────────────────────────────────────────────────────────────────────
-tab_sensor, tab_image, tab_video, tab_audio = st.tabs([
+tab_sensor, tab_image, tab_video, tab_audio, tab_live_mic = st.tabs([
     "🔌 Sensor Simulator",
     "🖼️ Image Analysis",
     "🎬 Video Analysis",
     "🎵 Audio / Cry Detection",
+    "🎙️ Live Mic",
 ])
 
 with tab_sensor:
@@ -106,3 +110,6 @@ with tab_video:
 
 with tab_audio:
     audio_tab.render(cry_model, class_names)
+
+with tab_live_mic:
+    live_audio_tab.render(cry_model, class_names)

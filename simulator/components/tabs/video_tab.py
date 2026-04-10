@@ -25,13 +25,9 @@ def render(posture_model, object_model, cry_model=None, class_names=None) -> Non
 
     st.write("Processing video…")
 
-    col_orig, col_live = st.columns(2)
-    with col_orig:
-        st.subheader("Original Video")
-        st.video(uploaded)
-    with col_live:
-        st.subheader("Live Detection Feed")
-        live_placeholder = st.empty()
+    # ── Detection feed only — full width ─────────────────────────────────────
+    st.subheader("Live Detection Feed")
+    live_placeholder = st.empty()
 
     st.divider()
     st.subheader("Real-time Analysis Summary")
@@ -136,9 +132,6 @@ def render(posture_model, object_model, cry_model=None, class_names=None) -> Non
         # ── Overall summary after processing ─────────────────────────────────
         if final_video_path:
             st.divider()
-            st.subheader("Processed Video (Full)")
-            st.video(final_video_path)
-
             st.subheader("Overall Analysis Summary")
             st.write(f"**Overall Posture:** {posture_summary}")
             st.write(
@@ -151,6 +144,12 @@ def render(posture_model, object_model, cry_model=None, class_names=None) -> Non
             else:
                 st.success("✅ Baby is in a normal status. No hazardous objects in video.")
 
+            # ── Videos collapsed at the bottom ───────────────────────────────
+            with st.expander("📹 View original uploaded video"):
+                st.video(uploaded)
+
+            with st.expander("🎬 View processed detection video"):
+                st.video(final_video_path)
     finally:
         if final_video_path and os.path.exists(final_video_path):
             os.remove(final_video_path)
